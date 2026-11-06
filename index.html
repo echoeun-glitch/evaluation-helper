@@ -1,0 +1,515 @@
+<!doctype html><html><head><meta charset="utf-8"><title>평가 입력기</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%231e6a4c%22/%3E%3Ctext x=%2250%22 y=%2268%22 font-size=%2256%22 text-anchor=%22middle%22 fill=%22white%22%3E%E2%9C%93%3C/text%3E%3C/svg%3E"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* Layout: two stacked work panels — ① 영역별 의견 은행, ② 학생 표. Plain tool, gym-floor green accent, level colors as semantic chips. */
+:root{
+  --bg:#f4f6f3; --surface:#ffffff; --sunk:#eef1ed; --ink:#1c2420; --muted:#5d6a64; --line:#d6ddd8;
+  --accent:#1e6a4c; --accent-ink:#ffffff; --accent-soft:#e1efe8;
+  --lv1:#2a62a8; --lv1-bg:#e5eefa; --lv2:#2c7a4f; --lv2-bg:#e3f2e9; --lv3:#9a6a12; --lv3-bg:#f8efda; --lv4:#b4471f; --lv4-bg:#fbe8df;
+  --warn:#b4471f;
+  --o1:#1f56a8; --o2:#1d7a46; --o3:#1c2420; --o4:#8a3a8c;
+  --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141a17; --surface:#1b2320; --sunk:#111613; --ink:#e4ebe7; --muted:#9aa8a1; --line:#2e3a35;
+  --accent:#5cc196; --accent-ink:#0d1a14; --accent-soft:#1d3329;
+  --lv1:#8db8f0; --lv1-bg:#1c2b40; --lv2:#7fd3a3; --lv2-bg:#183224; --lv3:#e6c06b; --lv3-bg:#352a12; --lv4:#f09a76; --lv4-bg:#3a2218;
+  --warn:#f09a76; --o1:#8fbaf5; --o2:#7fd6a4; --o3:#e4ebe7; --o4:#e0a3e2; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141a17; --surface:#1b2320; --sunk:#111613; --ink:#e4ebe7; --muted:#9aa8a1; --line:#2e3a35;
+  --accent:#5cc196; --accent-ink:#0d1a14; --accent-soft:#1d3329;
+  --lv1:#8db8f0; --lv1-bg:#1c2b40; --lv2:#7fd3a3; --lv2-bg:#183224; --lv3:#e6c06b; --lv3-bg:#352a12; --lv4:#f09a76; --lv4-bg:#3a2218;
+  --warn:#f09a76; --o1:#8fbaf5; --o2:#7fd6a4; --o3:#e4ebe7; --o4:#e0a3e2; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 64px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+header h1{font-size:26px;margin:0;letter-spacing:-.01em;text-wrap:balance}
+header p{margin:6px 0 0;color:var(--muted);max-width:62ch}
+.meta{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px}
+.meta label{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+input[type=text],input[type=number],textarea,select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 10px}
+input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+textarea{width:100%;resize:vertical;line-height:1.55}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.panel-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.panel-head h2{margin:0;font-size:18px;display:flex;align-items:center;gap:10px}
+.step{font-family:var(--f-mono);font-size:12px;color:var(--accent-ink);background:var(--accent);border-radius:4px;padding:2px 7px}
+.panel-body{padding:20px;display:flex;flex-direction:column;gap:20px}
+button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:7px 12px;font-size:14px}
+button:hover{background:var(--sunk)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:500}
+button.primary:hover{filter:brightness(1.08)}
+button.ghost{border-color:transparent;color:var(--muted)}
+button:disabled{opacity:.55;cursor:default}
+.area{border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.area-top{display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr) auto;gap:12px;padding:14px;align-items:start}
+.area-top .fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fld > span{font-size:12px;color:var(--muted);letter-spacing:.02em}
+.area-actions{display:flex;flex-direction:column;gap:6px;padding-top:20px}
+.status{font-size:13px;color:var(--muted);padding:0 14px 10px}
+.status.err{color:var(--warn)}
+.badge{font-size:11px;font-weight:500;border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:1px 8px;margin-left:6px;vertical-align:2px}
+.levels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--line)}
+.lv{padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.lv + .lv{border-left:1px solid var(--line)}
+.lv-h{display:flex;justify-content:space-between;align-items:center}
+.lv-h small{font-family:var(--f-mono);color:var(--muted);font-size:12px}
+.ops{display:flex;flex-direction:column;gap:6px}
+.opi{font-size:13px;line-height:1.5;min-height:3.4em;resize:none;overflow:hidden;field-sizing:content;background:var(--surface);border-color:var(--line);padding:6px 8px}
+.opi.o1{color:var(--o1)} .opi.o2{color:var(--o2)} .opi.o3{color:var(--o3)} .opi.o4{color:var(--o4)}
+.area-left{display:flex;flex-direction:column;gap:10px;min-width:0}
+.meta select{font:inherit;padding:5px 8px}
+.chip{display:inline-block;font-size:12px;font-weight:700;border-radius:4px;padding:1px 8px}
+.c1{color:var(--lv1);background:var(--lv1-bg)} .c2{color:var(--lv2);background:var(--lv2-bg)} .c3{color:var(--lv3);background:var(--lv3-bg)} .c4{color:var(--lv4);background:var(--lv4-bg)}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.toolbar .sp{flex:1}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;min-width:820px}
+th,td{border-bottom:1px solid var(--line);padding:10px 12px;vertical-align:top;text-align:left}
+th{background:var(--sunk);font-size:13px;font-weight:500;color:var(--muted);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.no{font-family:var(--f-mono);font-variant-numeric:tabular-nums;width:56px;text-align:center;color:var(--muted);padding-top:14px}
+td.sel{width:300px}
+td.cp{width:110px}
+.selrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.selrow + .selrow{margin-top:8px}
+.selrow .an{font-size:12px;color:var(--muted);width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:4px 11px;font-size:13px;background:var(--surface);color:var(--muted)}
+.seg button + button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"].l1{background:var(--lv1-bg);color:var(--lv1);font-weight:700}
+.seg button[aria-pressed="true"].l2{background:var(--lv2-bg);color:var(--lv2);font-weight:700}
+.seg button[aria-pressed="true"].l3{background:var(--lv3-bg);color:var(--lv3);font-weight:700}
+.seg button[aria-pressed="true"].l4{background:var(--lv4-bg);color:var(--lv4);font-weight:700}
+td.op textarea{min-height:96px;font-size:14px;border-color:transparent;background:var(--sunk)}
+td.op textarea:focus{border-color:var(--line);background:var(--surface)}
+.cnt{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:11px;color:var(--muted);margin-top:4px;display:flex;gap:10px}
+.cnt .edited{color:var(--lv3)}
+.cp-col{display:flex;flex-direction:column;gap:6px}
+.cp-col button{width:100%}
+button.done{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+th .bulk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:400;margin-top:6px;white-space:normal}
+th .bulk select{padding:2px 6px;font-size:12px}
+.manual{padding:0 14px 14px;display:flex;flex-direction:column;gap:8px}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+@media (max-width:860px){
+  .area-top{grid-template-columns:1fr}
+  .area-actions{flex-direction:row;padding-top:0}
+  .levels{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .lv:nth-child(3){border-left:0}
+  .lv:nth-child(n+3){border-top:1px solid var(--line)}
+}
+@media (max-width:520px){
+  .levels{grid-template-columns:1fr}
+  .lv + .lv{border-left:0;border-top:1px solid var(--line)}
+  header h1{font-size:22px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>평가 입력기</h1>
+    <p>평가 영역별 기준을 넣으면 최상·상·중·하 의견을 8개씩 만듭니다. 학생마다 척도를 고르면 영역별 문장을 조합해 바로 복사할 수 있어요. 과목을 바꾸면 과목별로 따로 저장됩니다.</p>
+    <div class="meta">
+      <label for="subject">과목 <select id="subject"></select></label>
+      <label for="grade">학년 <select id="grade"><option value="">선택</option><option>1학년</option><option>2학년</option><option>3학년</option><option>4학년</option><option>5학년</option><option>6학년</option></select></label>
+    </div>
+  </header>
+
+  <section class="panel" aria-labelledby="h1">
+    <div class="panel-head">
+      <h2 id="h1"><span class="step">1</span>평가 영역과 의견</h2>
+      <button id="addArea">+ 영역 추가</button>
+    </div>
+    <div class="panel-body" id="areas"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="h2">
+    <div class="panel-head">
+      <h2 id="h2"><span class="step">2</span>학생별 평가 입력</h2>
+      <div class="toolbar">
+        <label for="count" style="font-size:13px;color:var(--muted)">학생 수</label>
+        <input type="number" id="count" min="1" max="60" style="width:76px">
+        <button class="primary" id="makeTbl">표 만들기</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="toolbar">
+        <p class="hint">같은 척도를 고른 학생끼리는 가능한 한 서로 다른 문장이 배정됩니다. 의견 칸은 직접 고칠 수도 있어요.</p>
+        <span class="sp"></span>
+        <button id="reshuffle">전체 다시 조합</button>
+        <button id="copyAll">전체 복사</button>
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr id="thead"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const LV = ["최상","상","중","하"];
+const KEY = "pe-eval-input-v1";
+const uid = () => Math.random().toString(36).slice(2,9);
+
+const EXAMPLE_OPS = {
+"최상":[
+"건강 체력의 요소를 정확히 이해하고 자신의 체력 측정 결과를 분석하여 부족한 요소를 스스로 찾아냄. 체력 증진 계획을 구체적으로 세우고 꾸준히 실천하여 뚜렷한 향상을 보임.",
+"심폐지구력, 근력, 유연성 등 체력 요소별 운동 방법을 정확히 알고 친구들에게 설명할 수 있음. 자신에게 맞는 운동 강도와 횟수를 정해 계획적으로 실천하는 태도가 매우 우수함.",
+"체력 측정에 성실히 참여하여 결과를 바르게 기록하고 변화 과정을 꼼꼼히 비교함. 측정 결과를 바탕으로 생활 속 운동 습관을 만들어 실천하는 모습이 돋보임.",
+"체력 증진의 필요성을 깊이 이해하고 운동 계획을 스스로 점검하고 수정하며 실천함. 어려운 과제에도 끝까지 도전하며 모둠 친구들의 체력 운동을 적극적으로 도움.",
+"왕복오래달리기, 윗몸말아올리기 등 측정 종목의 바른 자세를 정확히 익혀 수행함. 측정 결과를 그래프로 정리하고 목표를 세워 꾸준히 노력하는 자세가 매우 훌륭함.",
+"건강 체력 요소와 이를 기르는 운동을 연결하여 설명하는 능력이 뛰어남. 주간 운동 계획표를 성실히 작성하고 실천 결과를 스스로 평가하며 꾸준히 성장함.",
+"자신의 체력 수준을 객관적으로 파악하고 실천 가능한 목표를 세움. 수업 시간 외에도 줄넘기와 달리기를 꾸준히 실천하여 체력이 크게 향상됨.",
+"체력 운동의 원리를 이해하고 준비 운동과 정리 운동까지 빠짐없이 챙겨 안전하게 운동함. 체력 증진 활동에 언제나 적극적으로 참여하여 다른 학생들에게 좋은 본보기가 됨."],
+"상":[
+"건강 체력의 요소를 잘 이해하고 자신의 체력 측정 결과를 바르게 확인함. 부족한 체력 요소를 기르기 위한 계획을 세워 성실히 실천함.",
+"체력 요소별 운동 방법을 알고 수업 활동에 적극적으로 참여함. 자신의 체력 수준에 맞는 운동을 골라 꾸준히 실천하려고 노력함.",
+"체력 측정 종목의 방법을 잘 익혀 바른 자세로 측정에 참여함. 측정 결과를 기록하고 이를 바탕으로 알맞은 운동 목표를 세움.",
+"체력 증진의 중요성을 알고 운동 계획을 세워 실천하는 태도가 바름. 꾸준한 노력으로 지난 측정보다 향상된 결과를 보임.",
+"심폐지구력과 근지구력을 기르는 운동을 구분하여 설명할 수 있음. 모둠 활동에서 친구들과 협력하며 체력 운동에 성실히 참여함.",
+"자신의 체력 측정 결과를 이해하고 개선할 점을 찾아 기록함. 운동 계획을 대체로 잘 지키며 체력 향상을 위해 노력함.",
+"준비 운동과 정리 운동의 필요성을 알고 바르게 실천함. 체력 운동에 즐겁게 참여하며 맡은 활동을 끝까지 해냄.",
+"체력 요소에 맞는 운동을 알고 생활 속에서 실천하려고 노력함. 체력 측정 결과의 변화를 살피며 목표를 향해 꾸준히 운동함."],
+"중":[
+"건강 체력의 요소를 대략적으로 이해하고 체력 측정에 참여함. 교사의 도움을 받아 체력 증진 계획을 세우고 실천하려고 노력함.",
+"체력 측정 종목의 방법을 알고 측정 활동에 참여함. 측정 결과를 바탕으로 운동 목표를 세우는 데 조금 더 노력이 필요함.",
+"체력 요소별 운동 방법을 일부 이해하고 수업 활동에 참여함. 운동 계획을 꾸준히 실천하는 습관을 기른다면 더욱 성장할 것으로 기대됨.",
+"체력 증진의 필요성을 알고 있으며 주어진 운동 과제를 수행함. 자신의 체력 수준을 살펴보고 부족한 부분을 찾는 연습이 필요함.",
+"체력 운동에 성실하게 참여하려는 태도를 보임. 바른 자세로 운동하는 방법을 익히면 더 좋은 결과를 얻을 수 있을 것임.",
+"친구들과 함께하는 체력 활동에 즐겁게 참여함. 체력 측정 결과를 기록하고 변화를 비교하는 활동에 관심을 가지면 좋겠음.",
+"준비 운동과 정리 운동의 순서를 알고 따라 함. 체력 증진 계획을 스스로 세워 실천하는 경험을 늘려 가면 좋겠음.",
+"기본적인 체력 운동 방법을 익혀 수행할 수 있음. 꾸준한 실천을 통해 체력이 향상되는 기쁨을 느낄 수 있도록 지도가 필요함."],
+"하":[
+"건강 체력의 요소를 이해하는 데 어려움이 있으나 체력 측정에 참여함. 교사와 친구의 도움을 받아 기본적인 운동 방법을 익히고 있음.",
+"체력 측정 종목의 방법을 익히는 중이며 활동에 참여하려고 노력함. 쉬운 운동부터 꾸준히 실천하는 습관을 기를 필요가 있음.",
+"체력 운동에 참여하는 시간이 점차 늘어나고 있음. 자신의 체력 수준을 알고 작은 목표를 세워 실천하도록 격려가 필요함.",
+"체력 증진 활동에 흥미를 가지기 시작함. 바른 자세로 운동하는 방법을 반복하여 익히도록 지속적인 지도가 필요함.",
+"교사의 안내에 따라 준비 운동과 체력 운동에 참여함. 운동 계획을 세우고 실천하는 과정을 단계적으로 연습할 필요가 있음.",
+"모둠 친구들과 함께 체력 활동에 참여하며 조금씩 자신감을 얻고 있음. 생활 속에서 할 수 있는 간단한 운동을 꾸준히 실천하면 좋겠음.",
+"체력 측정 결과를 확인하고 자신의 상태에 관심을 가지기 시작함. 체력 향상을 위해 매일 조금씩 운동하는 습관을 기르도록 지도가 필요함.",
+"기초적인 체력 운동을 따라 하며 끝까지 참여하려고 노력함. 작은 성공 경험을 쌓으며 체력 운동에 대한 자신감을 키워 가고 있음."]
+};
+
+const SUBJECTS = ["국어","도덕","수학","사회","과학","영어","체육","음악","실과","미술","통합교과"];
+const KEY2 = "eval-input-v2:";
+const emptyOps = () => ({"최상":[],"상":[],"중":[],"하":[]});
+function defaultState(subject){
+  if (subject !== "체육") return {areas:[{id:uid(), name:"", activity:"", criteria:"", ops:emptyOps()}], rows:[]};
+  const a1 = {id:uid(), name:"건강", activity:"체력 측정(PAPS), 줄넘기 챌린지, 개인 체력 증진 계획표 작성", criteria:"건강 체력의 요소를 이해하고, 자신의 체력 수준을 측정하여 체력 증진 계획을 세워 꾸준히 실천할 수 있다.", ops:JSON.parse(JSON.stringify(EXAMPLE_OPS)), example:true};
+  const a2 = {id:uid(), name:"경쟁", activity:"영역형 게임(플래그 풋볼), 팀별 작전 회의", criteria:"영역형 경쟁 게임의 규칙과 기본 기능을 익히고, 팀원과 협력하여 게임 전략을 세워 실천할 수 있다.", ops:emptyOps()};
+  const sels = ["최상","상","상","중","하"];
+  const rows = sels.map((lv,i)=>({sel:{[a1.id]:lv}, pick:{[a1.id]:i%8}, custom:null}));
+  return {areas:[a1,a2], rows};
+}
+const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e) { return null; } };
+const lsSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) {} };
+
+/* 전역 설정(G): 마지막 과목·학년. 과목별 데이터(S)는 과목마다 따로 저장 */
+let G = lsGet(KEY2+"settings") || {subject:"체육", grade:""};
+(function migrate(){
+  const old = lsGet(KEY);
+  if (old && Array.isArray(old.areas) && !lsGet(KEY2+"체육")){
+    if (old.grade) G.grade = old.grade;
+    lsSet(KEY2+"체육", {areas:old.areas, rows:old.rows||[]});
+  }
+})();
+function load(subject){
+  let s = lsGet(KEY2+subject);
+  if (!s || !Array.isArray(s.areas)) s = defaultState(subject);
+  s.areas.forEach(a=>{
+    a.activity ??= ""; a.ops ||= emptyOps();
+    if (a.name==="건강 – 체력 증진") a.name="건강";
+    if (a.name==="경쟁 – 영역형 게임") a.name="경쟁";
+  });
+  s.rows ||= [];
+  return s;
+}
+let S = load(G.subject);
+let saveT;
+function saveNow(){ clearTimeout(saveT); lsSet(KEY2+G.subject, S); lsSet(KEY2+"settings", G); }
+function save(){ clearTimeout(saveT); saveT = setTimeout(saveNow, 300); }
+
+let sample = null;
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- 영역 패널 ---------- */
+function renderAreas(){
+  const box = $("#areas");
+  if (!S.areas.length){ box.innerHTML = '<div class="empty">평가 영역이 없습니다. “+ 영역 추가”로 첫 영역을 만드세요.</div>'; return; }
+  box.innerHTML = S.areas.map((a,i)=>`
+    <div class="area" data-id="${a.id}">
+      <div class="area-top">
+        <div class="area-left">
+          <label class="fld"><span>영역 ${i+1}${a.example?'<span class="badge">예시 의견</span>':''}</span>
+            <input type="text" id="an-${a.id}" data-k="name" value="${esc(a.name)}" placeholder="예: 표현"></label>
+          <label class="fld"><span>주요 활동</span>
+            <textarea id="aa-${a.id}" data-k="activity" rows="2" placeholder="예: 리듬 줄넘기, 모둠별 표현 발표">${esc(a.activity||"")}</textarea></label>
+        </div>
+        <label class="fld"><span>평가 기준 (성취기준·평가 요소)</span>
+          <textarea id="ac-${a.id}" data-k="criteria" rows="5" placeholder="예: 리듬의 특징을 이해하고 음악에 맞춰 동작을 창의적으로 표현할 수 있다.">${esc(a.criteria)}</textarea></label>
+        <div class="area-actions">
+          <button class="primary" data-act="gen">${hasOps(a)?'의견 다시 생성':'의견 생성'}</button>
+          <button class="ghost" data-act="del">영역 삭제</button>
+        </div>
+      </div>
+      <div class="status" id="st-${a.id}" hidden></div>
+      <div class="levels">
+        ${LV.map((lv,j)=>`<div class="lv">
+          <div class="lv-h"><span class="chip c${j+1}">${lv}</span><small id="lc-${a.id}-${j}">${(a.ops[lv]||[]).length}/8</small></div>
+          <div class="ops" id="ops-${a.id}-${j}">${opsHTML(a,lv,j)}</div>
+        </div>`).join("")}
+      </div>
+      <p class="hint" style="padding:0 14px 12px">칸 하나가 의견 하나입니다(색으로 구분). 직접 고치면 바로 학생 표에 반영되고, 여러 줄을 붙여 넣으면 줄마다 다음 칸으로 나뉘어 들어가요.</p>
+    </div>`).join("");
+}
+const hasOps = a => LV.some(l => (a.ops[l]||[]).length);
+function opsHTML(a, lv, j){
+  const L = a.ops[lv]||[]; const n = Math.max(8, L.length);
+  return [...Array(n).keys()].map(k=>`<textarea class="opi o${k%4+1}" id="op-${a.id}-${j}-${k}" data-lv="${lv}" data-k="${k}" rows="2" aria-label="${lv} 의견 ${k+1}" placeholder="의견 ${k+1}">${esc(L[k]||"")}</textarea>`).join("");
+}
+function fit(t){ if (CSS.supports && CSS.supports("field-sizing","content")) return; t.style.height="auto"; t.style.height=t.scrollHeight+2+"px"; }
+const fitAll = root => root.querySelectorAll(".opi").forEach(fit);
+
+$("#areas").addEventListener("input", e=>{
+  const el = e.target, card = el.closest(".area"); if(!card) return;
+  const a = S.areas.find(x=>x.id===card.dataset.id);
+  if (el.dataset.k){ a[el.dataset.k] = el.value; if(el.dataset.k==="name") renderTable(); }
+  else if (el.dataset.lv){
+    const lv = el.dataset.lv, j = LV.indexOf(lv), k = +el.dataset.k;
+    const box = $(`#ops-${a.id}-${j}`);
+    let vals = [...box.querySelectorAll(".opi")].map(t=>t.value);
+    if (el.value.includes("\n")){
+      const lines = el.value.split("\n").map(s=>s.trim()).filter(Boolean);
+      vals.splice(k, 1, ...lines);
+      a.ops[lv] = vals.map(s=>s.trim()).filter(Boolean);
+      box.innerHTML = opsHTML(a, lv, j); fitAll(box);
+      box.querySelectorAll(".opi")[Math.min(k+lines.length-1, a.ops[lv].length-1)]?.focus();
+    } else {
+      a.ops[lv] = vals.map(s=>s.trim()).filter(Boolean);
+      fit(el);
+    }
+    a.example = false;
+    $("#lc-"+a.id+"-"+j).textContent = a.ops[lv].length+"/8";
+    refreshTexts();
+  }
+  save();
+});
+$("#areas").addEventListener("click", e=>{
+  const b = e.target.closest("button[data-act]"); if(!b) return;
+  const id = b.closest(".area").dataset.id;
+  if (b.dataset.act==="gen") generate(id, b);
+  if (b.dataset.act==="del") askDelete(id, b);
+});
+function askDelete(id, b){
+  if (b.dataset.confirm){ S.areas = S.areas.filter(a=>a.id!==id); S.rows.forEach(r=>{delete r.sel[id]; delete r.pick[id];}); renderAll(); save(); return; }
+  b.dataset.confirm = "1"; b.textContent = "한 번 더 누르면 삭제"; b.style.color = "var(--warn)";
+  setTimeout(()=>{ if(b.isConnected){ delete b.dataset.confirm; b.textContent="영역 삭제"; b.style.color=""; } }, 3000);
+}
+$("#addArea").onclick = ()=>{
+  S.areas.push({id:uid(), name:"", activity:"", criteria:"", ops:emptyOps()});
+  renderAll(); save();
+  const last = S.areas[S.areas.length-1]; $("#an-"+last.id)?.focus();
+};
+
+/* ---------- 의견 생성 (Claude) ---------- */
+function setStatus(id, msg, err){ const s=$("#st-"+id); if(!s) return; s.hidden=!msg; s.textContent=msg||""; s.classList.toggle("err",!!err); }
+const ERR = {
+  not_granted:"Claude 사용 허용이 필요합니다. 허용하지 않으면 의견을 직접 입력해 주세요.",
+  sampling_disabled:"이 계정에서는 자동 생성을 쓸 수 없습니다. 의견을 직접 입력해 주세요.",
+  rate_limited:"요청이 많습니다. 잠시 후 다시 눌러 주세요.",
+  invalid_json:"결과 형식이 맞지 않았습니다. 다시 생성해 주세요.",
+  session_expired:"로그인이 만료되었습니다. 다시 로그인해 주세요.",
+};
+function buildPrompt(a){
+  return `당신은 초등학교 ${G.grade||""} ${G.subject} 교과를 가르치는 교사입니다. 학교생활기록부 '교과학습발달상황(세부능력 및 특기사항)'에 쓸 평가 의견을 만듭니다.
+
+과목: ${G.subject}
+평가 영역: ${a.name||"(이름 없음)"}
+주요 활동: ${(a.activity||"").trim()||"(없음)"}
+평가 기준: ${a.criteria}
+
+규칙:
+- 주요 활동이 있으면 의견에 그 활동 이름이나 장면을 자연스럽게 녹여 구체적으로 씁니다.
+- 성취 수준 "최상", "상", "중", "하" 각각 서로 다른 의견을 정확히 8개씩 씁니다.
+- 의견 하나는 반드시 정확히 두 문장입니다. 각 문장은 마침표로 끝납니다.
+- 생활기록부 문체: 명사형 종결("~함.", "~임.", "~보임.", "~필요함." 등). 학생 이름이나 "학생은", "이 학생은" 같은 주어는 쓰지 않습니다.
+- 평가 기준의 구체적인 지식·기능·태도 요소를 근거로 관찰 가능한 행동을 서술합니다.
+- 최상·상은 강점 중심, 중은 성취와 보완점, 하는 노력과 성장 가능성을 긍정적으로 서술하되 부정적·비하 표현은 쓰지 않습니다.
+- 같은 수준 안에서 첫 어절과 표현이 겹치지 않게 다양하게 씁니다. 의견 하나는 60~110자 정도.
+
+다음 JSON 객체 하나만 답하세요(다른 텍스트 없이):
+{"최상":["...",...8개],"상":[...8개],"중":[...8개],"하":[...8개]}`;
+}
+function parseOps(r){
+  if (typeof r==="string"){
+    const m = r.match(/\{[\s\S]*\}/); if(!m) throw {code:"invalid_json"};
+    try{ r = JSON.parse(m[0]); }catch(e){ throw {code:"invalid_json"}; }
+  }
+  const ops = {};
+  for (const lv of LV){
+    const arr = Array.isArray(r?.[lv]) ? r[lv].map(s=>String(s).replace(/\s+/g," ").trim()).filter(Boolean) : [];
+    ops[lv] = arr.slice(0,8);
+  }
+  if (!LV.some(l=>ops[l].length)) throw {code:"invalid_json"};
+  return ops;
+}
+function applyOps(a, ops){
+  a.ops = ops; a.example = false;
+  renderAll(); save();
+  const short = LV.filter(l=>ops[l].length<8);
+  setStatus(a.id, short.length ? `${short.join(", ")} 의견이 8개보다 적습니다. 직접 보충하거나 다시 생성해 주세요.` : "의견 32개를 넣었습니다. 필요하면 직접 다듬어 주세요.", !!short.length);
+}
+/* Claude 연결이 없는 곳(GitHub Pages 등): 프롬프트 복사 → Claude 답변 붙여넣기 */
+function showManual(a){
+  const card = document.querySelector(`.area[data-id="${a.id}"]`);
+  let m = $("#man-"+a.id);
+  if (!m){ m = document.createElement("div"); m.id="man-"+a.id; m.className="manual"; $("#st-"+a.id).after(m); }
+  m.innerHTML = `<p class="hint"><b>① 프롬프트 복사</b> → Claude(claude.ai)에 붙여 넣기 → <b>② 받은 답변 전체를 아래에 붙여 넣고 적용</b></p>
+    <div class="toolbar"><button class="primary" data-man="copy">① 프롬프트 복사</button><button class="ghost" data-man="close">닫기</button></div>
+    <textarea rows="4" id="mj-${a.id}" placeholder='Claude 답변을 여기에 붙여 넣으세요. 예: {"최상":[...],"상":[...],"중":[...],"하":[...]}'></textarea>
+    <div class="toolbar"><button class="primary" data-man="apply">② 의견 적용</button></div>`;
+  m.onclick = e=>{
+    const b = e.target.closest("button[data-man]"); if(!b) return;
+    if (b.dataset.man==="copy") copy(buildPrompt(a), b, null);
+    if (b.dataset.man==="close") m.remove();
+    if (b.dataset.man==="apply"){
+      try{ applyOps(a, parseOps($("#mj-"+a.id).value)); }
+      catch(err){ setStatus(a.id, "답변에서 의견을 찾지 못했습니다. Claude 답변 전체를 그대로 붙여 넣어 주세요.", true); }
+    }
+  };
+  $("#mj-"+a.id).focus();
+}
+async function generate(id, btn){
+  const a = S.areas.find(x=>x.id===id);
+  if (!a.criteria.trim()){ setStatus(id,"평가 기준을 먼저 입력해 주세요.",true); $("#ac-"+id).focus(); return; }
+  if (!sample){ setStatus(id,"이 화면에서는 자동 생성이 연결되어 있지 않아요. 아래 방법으로 Claude에게 받아 넣거나 의견을 직접 입력해 주세요."); showManual(a); return; }
+  btn.disabled = true; const old = btn.textContent; btn.textContent = "생성 중…";
+  setStatus(id,"Claude가 의견 32개를 쓰고 있어요. 30초~1분 정도 걸립니다.");
+  const prompt = buildPrompt(a);
+  try{
+    const r = await sample.json(prompt, {cache:false});
+    applyOps(a, parseOps(r));
+  }catch(e){
+    setStatus(id, ERR[e?.code] || "생성하지 못했습니다. 잠시 후 다시 시도해 주세요.", true);
+    btn.disabled = false; btn.textContent = old;
+  }
+}
+
+/* ---------- 학생 표 ---------- */
+function opText(a, lv, idx){ const L=(a.ops[lv]||[]); return L.length ? L[((idx||0)%L.length+L.length)%L.length] : ""; }
+function compose(r){ return S.areas.map(a=> r.sel[a.id] ? opText(a, r.sel[a.id], r.pick[a.id]) : "").filter(Boolean).join(" "); }
+function rowText(r){ return r.custom ?? compose(r); }
+function pickFor(areaId, lv, rowIdx, avoid){
+  const a = S.areas.find(x=>x.id===areaId); const n = Math.max((a.ops[lv]||[]).length,1);
+  const used = new Array(n).fill(0);
+  S.rows.forEach((r,i)=>{ if(i!==rowIdx && r.sel[areaId]===lv && r.pick[areaId]!=null) used[r.pick[areaId]%n]++; });
+  let cand = [...Array(n).keys()].filter(k=>k!==avoid); if(!cand.length) cand=[0];
+  const min = Math.min(...cand.map(k=>used[k]));
+  cand = cand.filter(k=>used[k]===min);
+  return cand[Math.floor(Math.random()*cand.length)];
+}
+const bytes = s => { let b=0; for(const ch of s){ b += ch==="\n"?2:(new TextEncoder().encode(ch).length); } return b; };
+function cntHTML(r){ const t=rowText(r); return `<span>${t.length}자</span><span>${bytes(t)}바이트</span>${r.custom!=null?'<span class="edited">직접 수정됨</span>':''}`; }
+
+function renderTable(){
+  $("#count").value = S.rows.length;
+  $("#thead").innerHTML = `<th>번호</th><th>척도 선택
+      <div class="bulk">${S.areas.map(a=>`<select id="bulk-${a.id}" data-bulk="${a.id}" aria-label="${esc(a.name)} 일괄 선택"><option value="">${esc(short(a.name))} 일괄…</option>${LV.map(l=>`<option>${l}</option>`).join("")}<option value="-">비우기</option></select>`).join("")}</div>
+    </th><th>의견</th><th>복사</th>`;
+  if (!S.rows.length){ $("#tbody").innerHTML = `<tr><td colspan="4" class="empty">학생 수를 입력하고 “표 만들기”를 누르세요.</td></tr>`; return; }
+  $("#tbody").innerHTML = S.rows.map((r,i)=>`
+    <tr data-i="${i}">
+      <td class="no">${i+1}</td>
+      <td class="sel">${S.areas.length ? S.areas.map(a=>`
+        <div class="selrow"><span class="an">${esc(a.name||"(이름 없는 영역)")}</span>
+          <div class="seg" role="group" aria-label="${esc(a.name)}">${LV.map((l,j)=>`<button class="l${j+1}" data-a="${a.id}" data-lv="${l}" aria-pressed="${r.sel[a.id]===l}">${l}</button>`).join("")}</div>
+        </div>`).join("") : '<span class="hint">먼저 평가 영역을 추가하세요.</span>'}</td>
+      <td class="op"><textarea id="ot-${i}" aria-label="${i+1}번 의견" placeholder="척도를 선택하면 의견이 조합됩니다.">${esc(rowText(r))}</textarea><div class="cnt" id="oc-${i}">${cntHTML(r)}</div></td>
+      <td class="cp"><div class="cp-col"><button class="primary" data-copy="${i}">복사</button><button data-re="${i}" title="같은 척도의 다른 문장으로 바꿉니다">다른 문장</button></div></td>
+    </tr>`).join("");
+}
+const short = s => (s||"영역").split(/[–-]/).pop().trim().slice(0,8);
+function refreshRow(i){ const r=S.rows[i]; const t=$("#ot-"+i); if(t && document.activeElement!==t) t.value=rowText(r); const c=$("#oc-"+i); if(c) c.innerHTML=cntHTML(r); }
+function refreshTexts(){ S.rows.forEach((_,i)=>refreshRow(i)); }
+
+$("#tbody").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  const tr = b.closest("tr"); const i = +tr.dataset.i; const r = S.rows[i];
+  if (b.dataset.lv){
+    const id=b.dataset.a, lv=b.dataset.lv;
+    if (r.sel[id]===lv){ delete r.sel[id]; delete r.pick[id]; }
+    else { r.sel[id]=lv; r.pick[id]=pickFor(id,lv,i); }
+    r.custom=null;
+    tr.querySelectorAll(`.seg button[data-a="${id}"]`).forEach(x=>x.setAttribute("aria-pressed", r.sel[id]===x.dataset.lv));
+    refreshRow(i); save();
+  } else if (b.dataset.re!=null){
+    S.areas.forEach(a=>{ if(r.sel[a.id]) r.pick[a.id]=pickFor(a.id,r.sel[a.id],i,r.pick[a.id]); });
+    r.custom=null; refreshRow(i); save();
+  } else if (b.dataset.copy!=null){
+    copy(rowText(r), b, $("#ot-"+i));
+  }
+});
+$("#tbody").addEventListener("input", e=>{
+  const t=e.target; if(!t.id.startsWith("ot-")) return;
+  const i=+t.id.slice(3); const r=S.rows[i];
+  r.custom = t.value===compose(r) ? null : t.value;
+  $("#oc-"+i).innerHTML=cntHTML(r); save();
+});
+$("#thead").addEventListener("change", e=>{
+  const s=e.target; if(!s.dataset.bulk) return;
+  const id=s.dataset.bulk, v=s.value; if(!v) return;
+  S.rows.forEach((r,i)=>{ if(v==="-"){ delete r.sel[id]; delete r.pick[id]; } else { r.sel[id]=v; r.pick[id]=undefined; } r.custom=null; });
+  if (v!=="-") S.rows.forEach((r,i)=>{ r.pick[id]=pickFor(id,v,i); });
+  s.value=""; renderTable(); save();
+});
+$("#makeTbl").onclick = ()=>{
+  const n = Math.max(1, Math.min(60, parseInt($("#count").value)||0));
+  while (S.rows.length<n) S.rows.push({sel:{},pick:{},custom:null});
+  S.rows.length = n; renderTable(); save();
+};
+$("#count").addEventListener("keydown", e=>{ if(e.key==="Enter") $("#makeTbl").click(); });
+$("#reshuffle").onclick = ()=>{
+  S.rows.forEach(r=>{ r.pick={}; r.custom=null; });
+  S.rows.forEach((r,i)=>S.areas.forEach(a=>{ if(r.sel[a.id]) r.pick[a.id]=pickFor(a.id,r.sel[a.id],i); }));
+  refreshTexts(); save();
+};
+$("#copyAll").onclick = e=>{
+  const txt = S.rows.map((r,i)=>`${i+1}\t${rowText(r).replace(/\s*\n\s*/g," ")}`).join("\n");
+  copy(txt, e.currentTarget, null);
+};
+async function copy(text, btn, field){
+  const old = btn.textContent;
+  try{ await navigator.clipboard.writeText(text); btn.textContent="복사됨"; btn.classList.add("done"); }
+  catch(err){
+    if (field){ field.focus(); field.select(); btn.textContent="선택됨 · Ctrl+C"; }
+    else { btn.textContent="복사 실패"; }
+  }
+  setTimeout(()=>{ btn.textContent=old; btn.classList.remove("done"); }, 1400);
+}
+
+/* ---------- 공통 ---------- */
+$("#subject").innerHTML = SUBJECTS.map(s=>`<option${s===G.subject?" selected":""}>${s}</option>`).join("");
+$("#grade").value = /^[1-6]학년$/.test(G.grade||"") ? G.grade : (/^[1-6]$/.test(G.grade||"") ? G.grade+"학년" : "");
+$("#subject").onchange = e=>{
+  saveNow();                       // 지금 과목 내용을 먼저 저장
+  G.subject = e.target.value;
+  S = load(G.subject);             // 저장된 과목이면 불러오고, 처음이면 새 화면
+  renderAll(); saveNow();
+};
+$("#grade").onchange = e=>{ G.grade=e.target.value; save(); };
+function renderAll(){ renderAreas(); renderTable(); fitAll(document); }
+window.addEventListener("pagehide", saveNow);
+renderAll();
+
+(async()=>{ try{ sample = await window.claude?.use?.("sample"); }catch(e){ sample=null; } })();
+</script>
+
+</body></html>
