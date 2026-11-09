@@ -129,6 +129,7 @@ th .bulk select{padding:2px 6px;font-size:12px}
   <header>
     <h1>평가 입력기</h1>
     <p>평가 영역별 기준을 넣으면 최상·상·중·하 의견을 8개씩 만듭니다. 학생마다 척도를 고르면 영역별 문장을 조합해 바로 복사할 수 있어요. 과목을 바꾸면 과목별로 따로 저장됩니다.</p>
+    <p class="hint">입력한 내용은 이 브라우저에만 저장됩니다. «의견 생성»을 누를 때만 과목·학년·영역 이름·주요 활동·평가 기준이 AI 서버로 전송되며, 학생 표의 내용은 보내지 않습니다.</p>
     <div class="meta">
       <label for="subject">과목 <select id="subject"></select></label>
       <label for="grade">학년 <select id="grade"><option value="">선택</option><option>1학년</option><option>2학년</option><option>3학년</option><option>4학년</option><option>5학년</option><option>6학년</option></select></label>
@@ -386,7 +387,7 @@ function applyOps(id, ops){
   const short = LV.filter(l=>ops[l].length<8);
   setStatus(id, short.length ? `${short.join(", ")} 의견이 8개보다 적습니다. 직접 보충하거나 다시 생성해 주세요.` : "의견 32개를 넣었습니다. 필요하면 직접 다듬어 주세요.", !!short.length);
 }
-/* 의견 생성 서버 주소 (Firebase Functions 배포 후 입력) */
+/* 의견 생성 서버 주소 (functions/ 를 배포한 주소). 비우면 «직접 AI에 묻기» 방식만 씁니다. */
 const API_URL = "https://asia-northeast3-teachingdiary-d14d5.cloudfunctions.net/generateOpinions";
 async function generate(id, btn){
   const a = S.areas.find(x=>x.id===id);
@@ -398,13 +399,14 @@ async function generate(id, btn){
     const res = await fetch(API_URL, {method:"POST", headers:{"content-type":"application/json"},
       body: JSON.stringify({subject:G.subject, grade:G.grade||"", name:a.name, activity:a.activity||"", criteria:a.criteria})});
     const data = await res.json().catch(()=>({}));
-    if (!res.ok){ if(res.status===429) $("#gp-"+id).hidden=false; throw new Error(data.message||"생성하지 못했습니다. 잠시 후 다시 시도해 주세요."); }
+    if (!res.ok){ $("#gp-"+id).hidden=false; throw new Error(data.message||"생성하지 못했습니다. 잠시 후 다시 시도하거나 아래 «직접 AI에 묻기» 방법을 이용해 주세요."); }
     const ops = parseReply(data.text);
     if (!ops) throw new Error("결과 형식을 읽지 못했습니다. 다시 생성해 주세요.");
     applyOps(id, ops);
     if (typeof data.remaining==="number") setStatus(id, $("#st-"+id).textContent+` (오늘 남은 생성: ${data.remaining}회)`, $("#st-"+id).classList.contains("err"));
   }catch(e){
-    setStatus(id, e.message && !/fetch|network/i.test(e.message) ? e.message : "서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.", true);
+    $("#gp-"+id).hidden=false;
+    setStatus(id, e.message && !/fetch|network/i.test(e.message) ? e.message : "서버에 연결하지 못했습니다. 인터넷 연결을 확인하거나 아래 «직접 AI에 묻기» 방법을 이용해 주세요.", true);
     btn.disabled = false; btn.textContent = old;
   }
 }
