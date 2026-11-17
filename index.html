@@ -262,13 +262,28 @@ const lsSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } cat
 let G = lsGet(KEY2+"settings") || {subject:"체육", grade:""};
 (function migrate(){
   const old = lsGet(KEY);
-  if (old && Array.isArray(old.areas) && !lsGet(KEY2+"체육")){
+  if (!G.byGrade && old && Array.isArray(old.areas) && !lsGet(KEY2+"체육")){
     if (old.grade) G.grade = old.grade;
     lsSet(KEY2+"체육", {areas:old.areas, rows:old.rows||[]});
   }
 })();
-function load(subject){
-  let s = lsGet(KEY2+subject);
+/* 학년 표기 통일: "5" → "5학년" */
+const normGrade = g => /^[1-6]학년$/.test(g||"") ? g : (/^[1-6]$/.test(g||"") ? g+"학년" : "");
+G.grade = normGrade(G.grade);
+/* 과목 데이터는 학년마다 따로 저장: eval-input-v2:5학년/체육 (학년을 고르지 않으면 "학년미선택/") */
+const dataKey = (subject, grade=G.grade) => KEY2 + (grade || "학년미선택") + "/" + subject;
+(function migrateToGrades(){
+  /* 예전에는 과목별로만 저장했음 → 지금 고른 학년의 데이터로 옮김 */
+  if (G.byGrade) return;
+  for (const subj of subjectList()){
+    const legacy = lsGet(KEY2+subj);
+    if (legacy && !lsGet(dataKey(subj))) lsSet(dataKey(subj), legacy);
+    try { localStorage.removeItem(KEY2+subj); } catch(e) {}
+  }
+  G.byGrade = true; lsSet(KEY2+"settings", G);
+})();
+function load(subject, grade=G.grade){
+  let s = lsGet(dataKey(subject, grade));
   if (!s || !Array.isArray(s.areas)) s = defaultState(subject);
   s.areas.forEach(a=>{
     a.activity ??= ""; a.ops ||= emptyOps();
@@ -280,7 +295,7 @@ function load(subject){
 }
 let S = load(G.subject);
 let saveT;
-function saveNow(){ clearTimeout(saveT); lsSet(KEY2+G.subject, S); lsSet(KEY2+"settings", G); }
+function saveNow(){ clearTimeout(saveT); lsSet(dataKey(G.subject), S); lsSet(KEY2+"settings", G); }
 function save(){ clearTimeout(saveT); saveT = setTimeout(saveNow, 300); }
 
 const $ = s => document.querySelector(s);
@@ -552,14 +567,19 @@ async function copy(text, btn, field){
 /* ---------- 공통 ---------- */
 function renderSubjects(){ $("#subject").innerHTML = subjectList().map(s=>`<option${s===G.subject?" selected":""}>${esc(s)}</option>`).join(""); }
 renderSubjects();
-$("#grade").value = /^[1-6]학년$/.test(G.grade||"") ? G.grade : (/^[1-6]$/.test(G.grade||"") ? G.grade+"학년" : "");
+$("#grade").value = G.grade;
 $("#subject").onchange = e=>{
   saveNow();                       // 지금 과목 내용을 먼저 저장
   G.subject = e.target.value;
   S = load(G.subject);             // 저장된 과목이면 불러오고, 처음이면 새 화면
   renderAll(); saveNow();
 };
-$("#grade").onchange = e=>{ G.grade=e.target.value; save(); };
+$("#grade").onchange = e=>{
+  saveNow();                       // 지금 학년 내용을 먼저 저장
+  G.grade = e.target.value;
+  S = load(G.subject);             // 학년마다 따로 저장된 내용을 불러옴
+  renderAll(); saveNow();
+};
 function renderAll(){ renderAreas(); renderTable(); fitAll(document); }
 window.addEventListener("pagehide", saveNow);
 
@@ -606,13 +626,14 @@ $("#impDlg").addEventListener("close", ()=>{
   applyImport(picked, impPlan.grade, $("#impReplace").checked);
   impPlan = null;
 });
-function applyImport(picked, grade, replace){
+function applyImport(picked, fileGrade, replace){
   saveNow();
+  const grade = fileGrade || G.grade;   // 파일에 적힌 학년으로 넣음
   const done = [];
   for (const p of picked){
     if (!subjectList().includes(p.subject)){ G.extraSubjects = [...(G.extraSubjects||[]), p.subject]; }
-    const stored = lsGet(KEY2+p.subject);
-    const s = p.subject===G.subject ? S : load(p.subject);
+    const stored = lsGet(dataKey(p.subject, grade));
+    const s = (p.subject===G.subject && grade===G.grade) ? S : load(p.subject, grade);
     const fresh = !stored || s.areas.every(blankArea);
     const incoming = p.areas.map(a=>({id:uid(), name:a.name, activity:a.activity, criteria:a.criteria, ops:emptyOps()}));
     let added;
@@ -625,14 +646,14 @@ function applyImport(picked, grade, replace){
       const extra = incoming.filter(a=>!have.has(sig(a)));
       s.areas = [...s.areas.filter(a=>!blankArea(a)), ...extra]; added = extra.length;
     }
-    lsSet(KEY2+p.subject, s);
+    lsSet(dataKey(p.subject, grade), s);
     done.push(added ? `${p.subject} ${added}개` : `${p.subject}(이미 있는 영역이라 건너뜀)`);
   }
-  if (grade && !G.grade) { G.grade = grade; $("#grade").value = grade; }
+  G.grade = grade; $("#grade").value = grade;
   const target = picked.some(p=>p.subject===G.subject) ? G.subject : picked[0].subject;
   G.subject = target; S = load(target);
   renderSubjects(); renderAll(); saveNow();
-  impMsg(`영역을 넣었습니다: ${done.join(", ")}. 내용을 확인한 뒤 영역마다 «의견 생성»을 누르세요.${picked.length>1?" 다른 과목은 위 «과목»에서 바꿔 보면 됩니다.":""}`);
+  impMsg(`${grade ? grade+"에 " : ""}영역을 넣었습니다: ${done.join(", ")}. 내용을 확인한 뒤 영역마다 «의견 생성»을 누르세요.${picked.length>1?" 다른 과목은 위 «과목»에서 바꿔 보면 됩니다.":""}`);
 }
 $("#impBtn").onclick = ()=>$("#impFile").click();
 $("#impFile").onchange = e=>{ readImport(e.target.files[0]); e.target.value=""; };
