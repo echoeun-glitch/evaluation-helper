@@ -121,6 +121,23 @@ th .bulk select{padding:2px 6px;font-size:12px}
   header h1{font-size:22px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* 평가 계획서(.hwp) 불러오기 */
+.imp-msg{margin-top:10px;font-size:13px;color:var(--accent)}
+.imp-msg.err{color:var(--warn)}
+dialog#impDlg{border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:0;width:min(560px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
+dialog#impDlg::backdrop{background:rgba(0,0,0,.35)}
+#impDlg form{display:flex;flex-direction:column;max-height:calc(100vh - 48px)}
+#impDlg h3{margin:0;padding:16px 18px 4px;font-size:17px}
+#impDlg .sub{margin:0;padding:0 18px 10px;font-size:13px;color:var(--muted)}
+#impDlg .list{overflow:auto;padding:4px 18px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+#impDlg .subj{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+#impDlg .subj:last-child{border-bottom:0}
+#impDlg .subj input{margin-top:3px;width:18px;height:18px;accent-color:var(--accent)}
+#impDlg .subj b{display:block;font-size:15px}
+#impDlg .subj small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+#impDlg .opts{padding:10px 18px;font-size:13px;color:var(--muted);display:flex;gap:8px;align-items:center}
+#impDlg .acts{display:flex;gap:8px;justify-content:flex-end;padding:0 18px 16px}
+body.dragging .wrap{outline:3px dashed var(--accent);outline-offset:4px}
 </style>
 </head>
 <body>
@@ -133,7 +150,10 @@ th .bulk select{padding:2px 6px;font-size:12px}
     <div class="meta">
       <label for="subject">과목 <select id="subject"></select></label>
       <label for="grade">학년 <select id="grade"><option value="">선택</option><option>1학년</option><option>2학년</option><option>3학년</option><option>4학년</option><option>5학년</option><option>6학년</option></select></label>
+      <button id="impBtn" type="button">평가 계획서 불러오기 (.hwp)</button>
+      <input type="file" id="impFile" accept=".hwp,.hwpx" hidden>
     </div>
+    <div class="imp-msg" id="impMsg" role="status" hidden></div>
   </header>
 
   <section class="panel" aria-labelledby="h1">
@@ -168,6 +188,17 @@ th .bulk select{padding:2px 6px;font-size:12px}
   </section>
 </div>
 
+<dialog id="impDlg" aria-labelledby="impTitle">
+  <form method="dialog">
+    <h3 id="impTitle">평가 계획서 불러오기</h3>
+    <p class="sub" id="impSub"></p>
+    <div class="list" id="impList"></div>
+    <label class="opts"><input type="checkbox" id="impReplace"> 이미 입력한 영역은 지우고 새로 넣기 (끄면 뒤에 덧붙임)</label>
+    <div class="acts"><button value="cancel" class="ghost">취소</button><button value="ok" class="primary" id="impOk">넣기</button></div>
+  </form>
+</dialog>
+
+<script src="hwp-import.js"></script>
 <script>
 const LV = ["최상","상","중","하"];
 const KEY = "pe-eval-input-v1";
@@ -212,7 +243,8 @@ const EXAMPLE_OPS = {
 "기초적인 체력 운동을 따라 하며 끝까지 참여하려고 노력함. 작은 성공 경험을 쌓으며 체력 운동에 대한 자신감을 키워 가고 있음."]
 };
 
-const SUBJECTS = ["국어","도덕","수학","사회","과학","영어","체육","음악","실과","미술","통합교과"];
+const BASE_SUBJECTS = ["국어","도덕","수학","사회","과학","영어","체육","음악","실과","미술","통합교과","창의적 체험활동"];
+const subjectList = () => [...BASE_SUBJECTS, ...(G.extraSubjects||[]).filter(s=>!BASE_SUBJECTS.includes(s))];
 const KEY2 = "eval-input-v2:";
 const emptyOps = () => ({"최상":[],"상":[],"중":[],"하":[]});
 function defaultState(subject){
@@ -518,7 +550,8 @@ async function copy(text, btn, field){
 }
 
 /* ---------- 공통 ---------- */
-$("#subject").innerHTML = SUBJECTS.map(s=>`<option${s===G.subject?" selected":""}>${s}</option>`).join("");
+function renderSubjects(){ $("#subject").innerHTML = subjectList().map(s=>`<option${s===G.subject?" selected":""}>${esc(s)}</option>`).join(""); }
+renderSubjects();
 $("#grade").value = /^[1-6]학년$/.test(G.grade||"") ? G.grade : (/^[1-6]$/.test(G.grade||"") ? G.grade+"학년" : "");
 $("#subject").onchange = e=>{
   saveNow();                       // 지금 과목 내용을 먼저 저장
@@ -529,6 +562,91 @@ $("#subject").onchange = e=>{
 $("#grade").onchange = e=>{ G.grade=e.target.value; save(); };
 function renderAll(){ renderAreas(); renderTable(); fitAll(document); }
 window.addEventListener("pagehide", saveNow);
+
+/* ---------- 평가 계획서(.hwp) 불러오기 ---------- */
+const IMP_ERR = {
+  "not-hwp": "한글(.hwp) 파일이 아니거나 읽을 수 없는 파일입니다.",
+  "encrypted": "암호가 걸린 파일은 읽을 수 없습니다. 한글에서 암호를 풀고 저장한 뒤 올려 주세요.",
+  "distribution": "배포용 문서는 읽을 수 없습니다. 한글에서 일반 문서로 저장한 뒤 올려 주세요.",
+  "old-browser": "이 브라우저에서는 한글 파일을 읽을 수 없습니다. 크롬이나 엣지 최신 버전으로 열어 주세요.",
+};
+function impMsg(text, err){ const m=$("#impMsg"); m.hidden=!text; m.textContent=text||""; m.classList.toggle("err",!!err); }
+const blankArea = a => !a.example && !(a.name||"").trim() && !(a.activity||"").trim() && !(a.criteria||"").trim() && !LV.some(l=>(a.ops?.[l]||[]).length);
+let impPlan = null;
+
+async function readImport(file){
+  impMsg("");
+  if (!file) return;
+  try{
+    const buf = await file.arrayBuffer();
+    const head = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+    if (/\.hwpx$/i.test(file.name) || (head[0]===0x50 && head[1]===0x4b)){
+      impMsg("HWPX 파일은 아직 읽지 못합니다. 한글에서 [파일 → 다른 이름으로 저장]의 파일 형식을 «한글 문서(*.hwp)»로 바꿔 저장한 뒤 올려 주세요.", true); return;
+    }
+    const plan = await HwpImport.readPlan(buf);
+    if (!plan.subjects.length){ impMsg("파일에서 «평가 영역» 칸이 있는 평가 계획 표를 찾지 못했습니다.", true); return; }
+    impPlan = plan; openImport(plan, file.name);
+  }catch(e){
+    console.error(e);
+    impMsg(IMP_ERR[e && e.code] || "파일을 읽는 중 문제가 생겼습니다. 다른 파일로 시도하거나 내용을 직접 입력해 주세요.", true);
+  }
+}
+function openImport(plan, fname){
+  const has = plan.subjects.some(s=>s.subject===G.subject);
+  $("#impSub").textContent = `${fname} · ${plan.grade?plan.grade+" · ":""}과목 ${plan.subjects.length}개를 찾았습니다. 넣을 과목을 고르세요.`;
+  $("#impList").innerHTML = plan.subjects.map((s,i)=>`<label class="subj"><input type="checkbox" data-i="${i}" ${(!has || s.subject===G.subject)?"checked":""}>
+    <span><b>${esc(s.subject)} · 영역 ${s.areas.length}개</b><small>${s.areas.map(a=>esc(a.name||"(이름 없음)")).join(", ")}</small></span></label>`).join("");
+  $("#impReplace").checked = false;
+  $("#impDlg").showModal();
+}
+$("#impDlg").addEventListener("close", ()=>{
+  if ($("#impDlg").returnValue!=="ok" || !impPlan) return;
+  const picked = [...$("#impList").querySelectorAll("input:checked")].map(x=>impPlan.subjects[+x.dataset.i]);
+  if (!picked.length) return;
+  applyImport(picked, impPlan.grade, $("#impReplace").checked);
+  impPlan = null;
+});
+function applyImport(picked, grade, replace){
+  saveNow();
+  const done = [];
+  for (const p of picked){
+    if (!subjectList().includes(p.subject)){ G.extraSubjects = [...(G.extraSubjects||[]), p.subject]; }
+    const stored = lsGet(KEY2+p.subject);
+    const s = p.subject===G.subject ? S : load(p.subject);
+    const fresh = !stored || s.areas.every(blankArea);
+    const incoming = p.areas.map(a=>({id:uid(), name:a.name, activity:a.activity, criteria:a.criteria, ops:emptyOps()}));
+    let added;
+    if (fresh || replace){
+      s.areas = incoming; added = incoming.length;
+      s.rows.forEach(r=>{ r.sel={}; r.pick={}; r.custom=null; });   // 지운 영역의 척도 선택도 비움
+    } else {
+      const sig = a => `${(a.name||"").trim()}|${(a.criteria||"").replace(/\s+/g," ").trim()}`;
+      const have = new Set(s.areas.map(sig));
+      const extra = incoming.filter(a=>!have.has(sig(a)));
+      s.areas = [...s.areas.filter(a=>!blankArea(a)), ...extra]; added = extra.length;
+    }
+    lsSet(KEY2+p.subject, s);
+    done.push(added ? `${p.subject} ${added}개` : `${p.subject}(이미 있는 영역이라 건너뜀)`);
+  }
+  if (grade && !G.grade) { G.grade = grade; $("#grade").value = grade; }
+  const target = picked.some(p=>p.subject===G.subject) ? G.subject : picked[0].subject;
+  G.subject = target; S = load(target);
+  renderSubjects(); renderAll(); saveNow();
+  impMsg(`영역을 넣었습니다: ${done.join(", ")}. 내용을 확인한 뒤 영역마다 «의견 생성»을 누르세요.${picked.length>1?" 다른 과목은 위 «과목»에서 바꿔 보면 됩니다.":""}`);
+}
+$("#impBtn").onclick = ()=>$("#impFile").click();
+$("#impFile").onchange = e=>{ readImport(e.target.files[0]); e.target.value=""; };
+/* 파일을 화면에 끌어다 놓아도 불러오기 */
+let dragN = 0;
+const isFileDrag = e => [...(e.dataTransfer?.types||[])].includes("Files");
+document.addEventListener("dragenter", e=>{ if(!isFileDrag(e)) return; e.preventDefault(); dragN++; document.body.classList.add("dragging"); });
+document.addEventListener("dragover", e=>{ if(isFileDrag(e)) e.preventDefault(); });
+document.addEventListener("dragleave", e=>{ if(!isFileDrag(e)) return; if(--dragN<=0){ dragN=0; document.body.classList.remove("dragging"); } });
+document.addEventListener("drop", e=>{
+  if(!isFileDrag(e)) return; e.preventDefault(); dragN=0; document.body.classList.remove("dragging");
+  const f = [...e.dataTransfer.files].find(f=>/\.hwpx?$/i.test(f.name)); if (f) readImport(f);
+});
+
 renderAll();
 
 </script>
