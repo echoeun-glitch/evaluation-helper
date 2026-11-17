@@ -139,7 +139,91 @@
     return tables;
   }
 
+  /* ---------- 2-1. HWPX: zip 안의 Contents/section*.xml 에서 표 읽기 ---------- */
+  async function readZip(buf) {
+    const u8 = new Uint8Array(buf), dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    let eocd = -1;
+    for (let i = u8.length - 22; i >= Math.max(0, u8.length - 22 - 65535); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    if (eocd < 0) throw new HwpError("not-hwp");
+    const n = dv.getUint16(eocd + 10, true);
+    let p = dv.getUint32(eocd + 16, true);
+    const files = new Map(), dec = new TextDecoder();
+    for (let k = 0; k < n && p + 46 <= u8.length && dv.getUint32(p, true) === 0x02014b50; k++) {
+      const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true);
+      const nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true);
+      const local = dv.getUint32(p + 42, true), name = dec.decode(u8.subarray(p + 46, p + 46 + nl));
+      files.set(name, { method, csize, local });
+      p += 46 + nl + xl + cl;
+    }
+    const read = async (name) => {
+      const f = files.get(name);
+      if (!f) return null;
+      const start = f.local + 30 + dv.getUint16(f.local + 26, true) + dv.getUint16(f.local + 28, true);
+      const raw = u8.subarray(start, start + f.csize);
+      if (f.method === 0) return raw;
+      if (f.method === 8) return inflateRaw(raw);
+      throw new HwpError("not-hwp");
+    };
+    return { names: [...files.keys()], read };
+  }
+
+  const local = (el) => el.localName || String(el.nodeName).replace(/^.*:/, "");
+  const up = (el, name) => { for (let e = el.parentNode; e && e.nodeType === 1; e = e.parentNode) if (local(e) === name) return e; return null; };
+  const kids = (el, name) => [...el.childNodes].filter((c) => c.nodeType === 1 && local(c) === name);
+  const allIn = (el, name) => [...el.getElementsByTagName("*")].filter((c) => local(c) === name);
+
+  function xmlTables(doc) {
+    const tables = [];
+    for (const tbl of allIn(doc, "tbl")) {
+      const t = { rows: +tbl.getAttribute("rowCnt") || 0, cols: +tbl.getAttribute("colCnt") || 0, cells: [] };
+      kids(tbl, "tr").forEach((tr, ri) => {
+        let ci = 0;
+        for (const tc of kids(tr, "tc")) {
+          const addr = allIn(tc, "cellAddr").find((x) => up(x, "tc") === tc);
+          const span = allIn(tc, "cellSpan").find((x) => up(x, "tc") === tc);
+          const c = addr ? +addr.getAttribute("colAddr") : ci, r = addr ? +addr.getAttribute("rowAddr") : ri;
+          const cs = (span && +span.getAttribute("colSpan")) || 1, rs = (span && +span.getAttribute("rowSpan")) || 1;
+          ci = c + cs;
+          /* 이 칸의 문단만 (칸 안에 들어 있는 다른 표의 문단은 빼고) */
+          const lines = allIn(tc, "p").filter((pp) => up(pp, "tc") === tc).map((pp) => {
+            let s = "";
+            for (const tEl of allIn(pp, "t").filter((x) => up(x, "p") === pp)) {
+              for (const nd of tEl.childNodes) {
+                if (nd.nodeType === 3 || nd.nodeType === 4) s += nd.nodeValue;
+                else if (nd.nodeType === 1) s += local(nd) === "lineBreak" ? "\n" : /tab|Space/i.test(local(nd)) ? " " : (nd.textContent || "");
+              }
+            }
+            return s;
+          });
+          t.cells.push({ r, c, rs, cs, lines });
+        }
+      });
+      tables.push(t);
+    }
+    return tables;
+  }
+
+  async function readHwpxTables(buf) {
+    if (typeof DOMParser === "undefined") throw new HwpError("old-browser");
+    const zip = await readZip(buf), dec = new TextDecoder();
+    const manifest = await zip.read("META-INF/manifest.xml");
+    if (manifest && /encryption-data/.test(dec.decode(manifest))) throw new HwpError("encrypted");
+    const sections = zip.names.filter((nm) => /^Contents\/section\d+\.xml$/i.test(nm))
+      .sort((a, b) => +a.match(/(\d+)\.xml$/i)[1] - +b.match(/(\d+)\.xml$/i)[1]);
+    if (!sections.length) throw new HwpError("not-hwp");
+    const tables = [];
+    for (const nm of sections) {
+      const doc = new DOMParser().parseFromString(dec.decode(await zip.read(nm)), "application/xml");
+      if (doc.getElementsByTagName("parsererror").length) throw new HwpError("not-hwp");
+      tables.push(...xmlTables(doc));
+    }
+    for (const t of tables) for (const c of t.cells) c.text = c.lines.join("\n").replace(/[ \t ]+/g, " ").replace(/ *\n */g, "\n").trim();
+    return tables;
+  }
+
   async function readTables(buf) {
+    const head = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+    if (head[0] === 0x50 && head[1] === 0x4b && head[2] === 3 && head[3] === 4) return readHwpxTables(buf);
     const cfb = readCfb(buf);
     const header = cfb.find("FileHeader");
     if (!header) throw new HwpError("not-hwp");
