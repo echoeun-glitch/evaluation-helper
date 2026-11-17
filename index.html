@@ -156,8 +156,8 @@ body.dragging .wrap{outline:3px dashed var(--accent);outline-offset:4px}
     <div class="meta">
       <label for="subject">과목 <select id="subject"></select></label>
       <label for="grade">학년 <select id="grade"><option value="">선택</option><option>1학년</option><option>2학년</option><option>3학년</option><option>4학년</option><option>5학년</option><option>6학년</option></select></label>
-      <button id="impBtn" type="button">평가 계획서 불러오기 (.hwp, .hwpx)</button>
-      <input type="file" id="impFile" accept=".hwp,.hwpx" hidden>
+      <button id="impBtn" type="button">평가 계획서 불러오기 (한글·워드)</button>
+      <input type="file" id="impFile" hidden><!-- 휴대폰·태블릿에서 .hwpx가 회색으로 막히지 않도록 형식 제한 없음 -->
     </div>
     <div class="imp-msg" id="impMsg" role="status" hidden></div>
   </header>
@@ -204,7 +204,7 @@ body.dragging .wrap{outline:3px dashed var(--accent);outline-offset:4px}
   </form>
 </dialog>
 
-<script src="hwp-import.js"></script>
+<script src="hwp-import.js?v=2026-11-17"></script><!-- 고칠 때마다 v를 바꿔 예전 파일이 남지 않게 -->
 <script>
 const LV = ["최상","상","중","하"];
 const KEY = "pe-eval-input-v1";
@@ -597,7 +597,8 @@ window.addEventListener("pagehide", saveNow);
 
 /* ---------- 평가 계획서(.hwp) 불러오기 ---------- */
 const IMP_ERR = {
-  "not-hwp": "한글(.hwp, .hwpx) 파일이 아니거나 읽을 수 없는 파일입니다.",
+  "not-hwp": "읽을 수 없는 파일입니다. 한글(.hwp, .hwpx)이나 워드(.docx) 파일을 올려 주세요.",
+  "not-plan": "적절한 평가 기준 파일이 아닙니다. «평가 영역»과 «평가 기준»(성취기준·성취 수준) 칸이 있는 표를 찾지 못했습니다.",
   "encrypted": "암호가 걸린 파일은 읽을 수 없습니다. 한글에서 암호를 풀고 저장한 뒤 올려 주세요.",
   "distribution": "배포용 문서는 읽을 수 없습니다. 한글에서 일반 문서로 저장한 뒤 올려 주세요.",
   "old-browser": "이 브라우저에서는 한글 파일을 읽을 수 없습니다. 크롬이나 엣지 최신 버전으로 열어 주세요.",
@@ -612,7 +613,13 @@ async function readImport(file){
   try{
     const buf = await file.arrayBuffer();
     const plan = await HwpImport.readPlan(buf);
-    if (!plan.subjects.length){ impMsg("파일에서 «평가 영역» 칸이 있는 평가 계획 표를 찾지 못했습니다.", true); return; }
+    /* 과목 이름을 못 찾은 표는 지금 고른 과목으로 */
+    const unknown = plan.subjects.filter(s=>s.subject==="과목 미상");
+    for (const u of unknown){
+      const same = plan.subjects.find(s=>s.subject===G.subject);
+      if (same && same!==u){ same.areas.push(...u.areas); plan.subjects.splice(plan.subjects.indexOf(u),1); }
+      else u.subject = G.subject;
+    }
     impPlan = plan; openImport(plan, file.name);
   }catch(e){
     console.error(e);
@@ -673,7 +680,7 @@ document.addEventListener("dragover", e=>{ if(isFileDrag(e)) e.preventDefault();
 document.addEventListener("dragleave", e=>{ if(!isFileDrag(e)) return; if(--dragN<=0){ dragN=0; document.body.classList.remove("dragging"); } });
 document.addEventListener("drop", e=>{
   if(!isFileDrag(e)) return; e.preventDefault(); dragN=0; document.body.classList.remove("dragging");
-  const f = [...e.dataTransfer.files].find(f=>/\.hwpx?$/i.test(f.name)); if (f) readImport(f);
+  const f = e.dataTransfer.files[0]; if (f) readImport(f);
 });
 
 renderAll();
