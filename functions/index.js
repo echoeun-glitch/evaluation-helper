@@ -1,10 +1,11 @@
 /* 평가 입력기 — AI 의견 생성 서버 (Firebase Functions 2세대)
  *
- * POST /generateOpinions  {subject, grade, name, activity, criteria}
+ * POST /generateOpinions  {accessCode, subject, grade, name, activity, criteria}
  *   200 → {text: "<JSON 문자열>", remaining: <오늘 남은 횟수>}
- *   4xx/5xx → {message: "<사용자에게 보여 줄 안내>"}
+ *   4xx/5xx → {message: "<사용자에게 보여 줄 안내>"}   (401 + reason:"access" = 입장 코드 틀림)
+ * POST /generateOpinions  {accessCode, action:"check"}  → 200 {ok:true}  (입장 코드 확인만, 횟수 안 셈)
  *
- * Claude API 키는 Secret Manager의 ANTHROPIC_API_KEY에 둡니다(코드·저장소에 넣지 않음).
+ * Claude API 키(ANTHROPIC_API_KEY)와 입장 코드(ACCESS_CODE)는 Secret Manager에 둡니다(코드·저장소에 넣지 않음).
  */
 import { onRequest } from "firebase-functions/v2/https";
 import { defineSecret, defineInt } from "firebase-functions/params";
@@ -14,10 +15,12 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import {
-  ALLOWED_ORIGINS, OPINION_SCHEMA, buildPrompt, validateInput, normalizeOpinions, clientIp, kstDay,
+  ALLOWED_ORIGINS, OPINION_SCHEMA, buildPrompt, validateInput, normalizeOpinions, clientIp, kstDay, codeMatches,
 } from "./lib.js";
 
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
+const ACCESS_CODE = defineSecret("ACCESS_CODE");
+const MAX_WRONG_CODES = 20;   // 하루에 입장 코드를 이만큼 틀리면 그날은 막음 (무작정 맞혀 보기 방지)
 /* 하루 사용 한도 — 배포할 때 물어보며, functions/.env 에 적어 둘 수도 있습니다. */
 const DAILY_LIMIT_PER_USER = defineInt("DAILY_LIMIT_PER_USER", { default: 30 });
 const DAILY_LIMIT_TOTAL = defineInt("DAILY_LIMIT_TOTAL", { default: 300 });
@@ -26,6 +29,17 @@ const MODEL = "claude-opus-5-5";
 
 initializeApp();
 const db = getFirestore();
+
+/* 입장 코드 틀린 횟수 (IP 해시별, 하루) */
+async function wrongCount(day, userKey) {
+  const d = await db.doc(`evaluationHelperUsage/${day}_${userKey}_wrong`).get();
+  return d.get("count") || 0;
+}
+async function addWrong(day, userKey) {
+  const expireAt = new Date(Date.now() + 3 * 24 * 3600 * 1000);
+  await db.doc(`evaluationHelperUsage/${day}_${userKey}_wrong`).set({ count: FieldValue.increment(1), expireAt }, { merge: true })
+    .catch((e) => logger.warn("wrong-code count failed", e));
+}
 
 /* 오늘 사용량을 1 늘립니다. 한도를 넘으면 늘리지 않고 null을 돌려줍니다. */
 async function reserve(day, userKey) {
@@ -76,7 +90,7 @@ async function callClaude(input) {
 export const generateOpinions = onRequest(
   {
     region: "asia-northeast3",
-    secrets: [ANTHROPIC_API_KEY],
+    secrets: [ANTHROPIC_API_KEY, ACCESS_CODE],
     cors: ALLOWED_ORIGINS,
     timeoutSeconds: 180,
     memory: "256MiB",
@@ -88,11 +102,30 @@ export const generateOpinions = onRequest(
     const origin = req.get("origin");
     if (origin && !ALLOWED_ORIGINS.includes(origin)) { res.status(403).json({ message: "허용되지 않은 주소입니다." }); return; }
 
+    const day = kstDay();
+    const userKey = createHash("sha256").update(clientIp(req)).digest("hex").slice(0, 32);
+
+    /* 입장 코드 확인 */
+    try {
+      if (await wrongCount(day, userKey) >= MAX_WRONG_CODES) {
+        res.status(429).json({ message: "입장 코드를 너무 많이 틀렸습니다. 내일 다시 시도해 주세요.", reason: "access-locked" });
+        return;
+      }
+    } catch (e) {
+      logger.error("wrong-code check failed", e);
+      res.status(500).json({ message: "서버에 문제가 생겼습니다. 잠시 후 다시 시도해 주세요." });
+      return;
+    }
+    if (!codeMatches(req.body?.accessCode, ACCESS_CODE.value())) {
+      await addWrong(day, userKey);
+      res.status(401).json({ message: "입장 코드가 맞지 않습니다.", reason: "access" });
+      return;
+    }
+    if (req.body?.action === "check") { res.json({ ok: true }); return; }
+
     const { value: input, error } = validateInput(req.body);
     if (error) { res.status(400).json({ message: error }); return; }
 
-    const day = kstDay();
-    const userKey = createHash("sha256").update(clientIp(req)).digest("hex").slice(0, 32);
     let remaining;
     try {
       remaining = await reserve(day, userKey);

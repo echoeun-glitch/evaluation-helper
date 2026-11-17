@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 /* 의견 생성 서버의 순수 로직 (네트워크·Firebase 없이 테스트 가능) */
 
 export const LEVELS = ["최상", "상", "중", "하"];
@@ -84,4 +85,13 @@ export function clientIp(req) {
 /* 한국 시간 기준 날짜 (하루 사용 횟수 집계용) */
 export function kstDay(now = new Date()) {
   return new Date(now.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/* 입장 코드 비교: 앞뒤 공백·대소문자 무시, 시간차로 코드를 알아내지 못하게 해시끼리 비교.
+   서버에 코드가 설정돼 있지 않으면 늘 거절 */
+export function codeMatches(given, expected) {
+  const norm = (v) => String(v ?? "").trim().toLowerCase();
+  if (!norm(expected) || typeof given !== "string" || given.length > 200) return false;
+  const h = (v) => createHash("sha256").update(norm(v)).digest();
+  return timingSafeEqual(h(given), h(expected));
 }
