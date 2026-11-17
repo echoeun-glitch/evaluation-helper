@@ -121,6 +121,12 @@ th .bulk select{padding:2px 6px;font-size:12px}
   header h1{font-size:22px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* 불러온 영역: 주요 활동을 직접 넣으라는 안내 (천천히 반짝임) */
+.need-act{font-size:12px;font-weight:700;color:var(--warn);background:var(--lv4-bg);border-radius:4px;padding:3px 7px;align-self:flex-start;animation:needPulse 1.4s ease-in-out infinite}
+.need-act[hidden]{display:none}
+textarea.need{border-color:var(--warn);box-shadow:0 0 0 2px var(--lv4-bg)}
+@keyframes needPulse{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion: reduce){.need-act{animation:none}}
 /* 평가 계획서(.hwp) 불러오기 */
 .imp-msg{margin-top:10px;font-size:13px;color:var(--accent)}
 .imp-msg.err{color:var(--warn)}
@@ -299,6 +305,8 @@ function saveNow(){ clearTimeout(saveT); lsSet(dataKey(G.subject), S); lsSet(KEY
 function save(){ clearTimeout(saveT); saveT = setTimeout(saveNow, 300); }
 
 const $ = s => document.querySelector(s);
+/* 계획서에서 불러온 영역인데 주요 활동이 비어 있으면 안내 */
+const needAct = a => !!a.imported && !(a.activity||"").trim();
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 /* ---------- 영역 패널 ---------- */
@@ -312,7 +320,8 @@ function renderAreas(){
           <label class="fld"><span>영역 ${i+1}${a.example?'<span class="badge">예시 의견</span>':''}</span>
             <input type="text" id="an-${a.id}" data-k="name" value="${esc(a.name)}" placeholder="예: 표현"></label>
           <label class="fld"><span>주요 활동</span>
-            <textarea id="aa-${a.id}" data-k="activity" rows="2" placeholder="예: 리듬 줄넘기, 모둠별 표현 발표">${esc(a.activity||"")}</textarea></label>
+            <textarea id="aa-${a.id}" data-k="activity" rows="2" placeholder="예: 리듬 줄넘기, 모둠별 표현 발표" class="${needAct(a)?'need':''}">${esc(a.activity||"")}</textarea>
+            <span class="need-act" id="na-${a.id}" ${needAct(a)?'':'hidden'}>주요 활동을 직접 넣어 주세요.</span></label>
         </div>
         <label class="fld"><span>평가 기준 (성취기준·평가 요소)</span>
           <textarea id="ac-${a.id}" data-k="criteria" rows="5" placeholder="예: 리듬의 특징을 이해하고 음악에 맞춰 동작을 창의적으로 표현할 수 있다.">${esc(a.criteria)}</textarea></label>
@@ -352,7 +361,10 @@ const fitAll = root => root.querySelectorAll(".opi").forEach(fit);
 $("#areas").addEventListener("input", e=>{
   const el = e.target, card = el.closest(".area"); if(!card) return;
   const a = S.areas.find(x=>x.id===card.dataset.id);
-  if (el.dataset.k){ a[el.dataset.k] = el.value; if(el.dataset.k==="name") renderTable(); }
+  if (el.dataset.k){
+    a[el.dataset.k] = el.value; if(el.dataset.k==="name") renderTable();
+    if (el.dataset.k==="activity"){ const on=needAct(a); el.classList.toggle("need",on); $("#na-"+a.id).hidden=!on; }
+  }
   else if (el.dataset.lv){
     const lv = el.dataset.lv, j = LV.indexOf(lv), k = +el.dataset.k;
     const box = $(`#ops-${a.id}-${j}`);
@@ -631,7 +643,7 @@ function applyImport(picked, fileGrade, replace){
     const stored = lsGet(dataKey(p.subject, grade));
     const s = (p.subject===G.subject && grade===G.grade) ? S : load(p.subject, grade);
     const fresh = !stored || s.areas.every(blankArea);
-    const incoming = p.areas.map(a=>({id:uid(), name:a.name, activity:a.activity, criteria:a.criteria, ops:emptyOps()}));
+    const incoming = p.areas.map(a=>({id:uid(), name:a.name, activity:"", criteria:a.criteria, ops:emptyOps(), imported:true}));   // 주요 활동은 선생님이 직접
     let added;
     if (fresh || replace){
       s.areas = incoming; added = incoming.length;
@@ -649,7 +661,7 @@ function applyImport(picked, fileGrade, replace){
   const target = picked.some(p=>p.subject===G.subject) ? G.subject : picked[0].subject;
   G.subject = target; S = load(target);
   renderSubjects(); renderAll(); saveNow();
-  impMsg(`${grade ? grade+"에 " : ""}영역을 넣었습니다: ${done.join(", ")}. 내용을 확인한 뒤 영역마다 «의견 생성»을 누르세요.${picked.length>1?" 다른 과목은 위 «과목»에서 바꿔 보면 됩니다.":""}`);
+  impMsg(`${grade ? grade+"에 " : ""}영역을 넣었습니다: ${done.join(", ")}. 영역마다 주요 활동을 직접 넣은 뒤 «의견 생성»을 누르세요.${picked.length>1?" 다른 과목은 위 «과목»에서 바꿔 보면 됩니다.":""}`);
 }
 $("#impBtn").onclick = ()=>$("#impFile").click();
 $("#impFile").onchange = e=>{ readImport(e.target.files[0]); e.target.value=""; };
