@@ -121,6 +121,17 @@ th .bulk select{padding:2px 6px;font-size:12px}
   header h1{font-size:22px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* 입장 화면 */
+body.locked .wrap{display:none}
+#gate{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:16px;background:var(--bg);z-index:50}
+body.locked #gate{display:flex}
+#gate form{width:min(380px,100%);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:24px 22px;display:flex;flex-direction:column;gap:12px}
+#gate h1{margin:0;font-size:22px}
+#gate p{margin:0;color:var(--muted);font-size:14px}
+#gate input{font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}
+#gate button{padding:10px 12px;font-size:15px}
+#gateMsg{min-height:1.4em;font-size:13px;color:var(--warn)}
+.lockbtn{margin-left:auto}
 /* 불러온 영역: 주요 활동을 직접 넣으라는 안내 (천천히 반짝임) */
 .need-act{font-size:12px;font-weight:700;color:var(--warn);background:var(--lv4-bg);border-radius:4px;padding:3px 7px;align-self:flex-start;animation:needPulse 1.4s ease-in-out infinite}
 .need-act[hidden]{display:none}
@@ -147,6 +158,18 @@ body.dragging .wrap{outline:3px dashed var(--accent);outline-offset:4px}
 </style>
 </head>
 <body>
+<div id="gate" role="dialog" aria-labelledby="gateTitle">
+  <form id="gateForm" autocomplete="off">
+    <h1 id="gateTitle">평가 입력기</h1>
+    <p>입장 코드를 입력해 주세요.</p>
+    <input type="password" id="gateCode" aria-label="입장 코드" placeholder="입장 코드" autocomplete="current-password" required>
+    <button class="primary" id="gateBtn">입장</button>
+    <div id="gateMsg" role="status"></div>
+  </form>
+</div>
+<script>/* 저장된 입장 코드가 없으면 그리기 전에 바로 잠금 */
+try { if (!localStorage.getItem("eval-input-v2:access")) document.body.classList.add("locked"); } catch(e) { document.body.classList.add("locked"); }
+</script>
 
 <div class="wrap">
   <header>
@@ -157,7 +180,8 @@ body.dragging .wrap{outline:3px dashed var(--accent);outline-offset:4px}
       <label for="subject">과목 <select id="subject"></select></label>
       <label for="grade">학년 <select id="grade"><option value="">선택</option><option>1학년</option><option>2학년</option><option>3학년</option><option>4학년</option><option>5학년</option><option>6학년</option></select></label>
       <button id="impBtn" type="button">평가 계획서 불러오기 (한글·워드)</button>
-      <input type="file" id="impFile" hidden><!-- 휴대폰·태블릿에서 .hwpx가 회색으로 막히지 않도록 형식 제한 없음 -->
+      <input type="file" id="impFile" hidden>
+      <button type="button" class="ghost lockbtn" id="lockBtn" title="이 기기에서 입장 코드를 지우고 잠급니다">잠그기</button><!-- 휴대폰·태블릿에서 .hwpx가 회색으로 막히지 않도록 형식 제한 없음 -->
     </div>
     <div class="imp-msg" id="impMsg" role="status" hidden></div>
   </header>
@@ -419,8 +443,9 @@ async function generate(id, btn){
   setStatus(id,"AI가 의견 32개를 쓰고 있어요. 30초~1분 정도 걸립니다.");
   try{
     const res = await fetch(API_URL, {method:"POST", headers:{"content-type":"application/json"},
-      body: JSON.stringify({subject:G.subject, grade:G.grade||"", name:a.name, activity:a.activity||"", criteria:a.criteria})});
+      body: JSON.stringify({accessCode:accessCode(), subject:G.subject, grade:G.grade||"", name:a.name, activity:a.activity||"", criteria:a.criteria})});
     const data = await res.json().catch(()=>({}));
+    if (res.status===401 && data.reason==="access"){ lock("입장 코드가 바뀌었습니다. 다시 입력해 주세요."); throw new Error(data.message); }
     if (!res.ok){ $("#gp-"+id).hidden=false; throw new Error(data.message||"생성하지 못했습니다. 잠시 후 다시 시도하거나 아래 «직접 AI에 묻기» 방법을 이용해 주세요."); }
     const ops = parseReply(data.text);
     if (!ops) throw new Error("결과 형식을 읽지 못했습니다. 다시 생성해 주세요.");
@@ -645,6 +670,43 @@ document.addEventListener("drop", e=>{
   if(!isFileDrag(e)) return; e.preventDefault(); dragN=0; document.body.classList.remove("dragging");
   const f = e.dataTransfer.files[0]; if (f) readImport(f);
 });
+
+/* ---------- 입장 코드 ---------- */
+/* 코드는 서버(Firebase 금고)에만 있고, 이 페이지에는 없습니다. 맞으면 이 기기에 기억해 둡니다. */
+const ACCESS_KEY = KEY2+"access";
+const accessCode = () => { try { return localStorage.getItem(ACCESS_KEY) || ""; } catch(e) { return ""; } };
+function lock(msg){
+  try { localStorage.removeItem(ACCESS_KEY); } catch(e) {}
+  document.body.classList.add("locked");
+  $("#gateMsg").textContent = msg || ""; $("#gateCode").value = ""; setTimeout(()=>$("#gateCode").focus(), 0);
+}
+async function checkCode(code){
+  const res = await fetch(API_URL, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({accessCode:code, action:"check"})});
+  const data = await res.json().catch(()=>({}));
+  return {ok: res.ok && data.ok===true, status: res.status, message: data.message};
+}
+$("#gateForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const code = $("#gateCode").value.trim(); if (!code) return;
+  const btn = $("#gateBtn"); btn.disabled = true; btn.textContent = "확인 중…"; $("#gateMsg").textContent = "";
+  try{
+    const r = await checkCode(code);
+    if (r.ok){
+      try { localStorage.setItem(ACCESS_KEY, code); } catch(e) {}
+      document.body.classList.remove("locked"); $("#gateCode").value = ""; renderAll();
+    } else {
+      $("#gateMsg").textContent = r.message || "확인하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+      $("#gateCode").select();
+    }
+  }catch(err){
+    $("#gateMsg").textContent = "서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.";
+  }
+  btn.disabled = false; btn.textContent = "입장";
+});
+$("#lockBtn").onclick = ()=>{ saveNow(); lock(""); };
+/* 기억해 둔 코드가 있으면 바로 쓰고, 뒤에서 아직 맞는지 확인 (서버가 바뀌었으면 다시 잠금) */
+if (accessCode()) checkCode(accessCode()).then(r=>{ if (!r.ok && r.status===401) lock("입장 코드가 바뀌었습니다. 다시 입력해 주세요."); }).catch(()=>{});
+else setTimeout(()=>$("#gateCode").focus(), 0);
 
 renderAll();
 

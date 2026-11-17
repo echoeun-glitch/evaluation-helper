@@ -6,6 +6,16 @@
 - 학생별로 척도를 고르면 영역별 문장을 조합해 복사 (같은 척도끼리 문장 중복 최소화)
 - 학년·과목별로 따로 저장 (학년이나 과목을 바꾸면 그 학년·과목 내용으로 바뀜), 글자 수·바이트 표시
 
+## 입장 코드
+
+처음 열면 입장 코드를 묻습니다. 맞는 코드를 넣으면 그 기기(브라우저)에 기억해 두고, 다음부터는 묻지 않습니다. 화면 위 «잠그기»를 누르면 그 기기에서 코드를 지우고 다시 잠급니다.
+
+- 코드는 페이지에 들어 있지 않고 Firebase 금고(Secret Manager)의 `ACCESS_CODE`에만 있으며, 의견 생성 서버가 확인합니다. 코드를 모르면 화면에 들어올 수 없고 AI 의견 생성도 쓸 수 없습니다.
+- 앞뒤 공백과 영문 대소문자는 구분하지 않습니다.
+- 같은 곳(IP)에서 하루에 20번 넘게 틀리면 그날은 막힙니다.
+- 코드를 바꾸면 이미 들어와 있던 기기도 다음에 열 때(또는 의견 생성 때) 다시 묻습니다.
+- 페이지 자체는 GitHub Pages의 공개 파일이라, 개발 도구로 HTML을 열어 보는 것까지 막지는 못합니다. 학생 정보는 페이지가 아니라 각자 브라우저에만 저장되고, 비용이 드는 AI 생성은 서버가 코드로 막습니다.
+
 ## 평가 계획서 불러오기 (.hwp, .hwpx, .docx)
 
 학교 평가 계획서(한글 .hwp·.hwpx, 워드 .docx)를 올리면 과목별 평가 영역·주요 활동·평가 기준을 찾아 영역 카드에 자동으로 넣습니다.
@@ -84,6 +94,12 @@ Claude API 키를 Secret Manager에 저장합니다(입력 창에 키를 붙여 
 firebase functions:secrets:set ANTHROPIC_API_KEY
 ```
 
+입장 코드도 같은 방법으로 저장합니다(입력 창에 정할 코드를 입력).
+
+```bash
+firebase functions:secrets:set ACCESS_CODE
+```
+
 배포합니다. 처음에는 하루 한도(`DAILY_LIMIT_PER_USER`, `DAILY_LIMIT_TOTAL`)를 물어보며, 엔터를 누르면 기본값(30, 300)이 들어갑니다.
 
 ```bash
@@ -99,6 +115,7 @@ firebase deploy --only functions:evaluation-helper
 - **한도 바꾸기:** `functions/.env`에 `DAILY_LIMIT_PER_USER=50`처럼 적고 다시 배포합니다.
 - **사용 기록 자동 삭제:** Firestore 콘솔 → TTL 정책에서 컬렉션 `evaluationHelperUsage`, 필드 `expireAt`으로 정책을 만들면 3일 지난 기록이 지워집니다.
 - **비용 상한:** Claude Console에서 월 사용 한도를, Google Cloud에서 예산 알림을 설정해 두세요.
+- **입장 코드 바꾸기:** `firebase functions:secrets:set ACCESS_CODE`로 새 코드를 넣고, 다시 배포할지 물으면 `Y`.
 - **로그 보기:** `firebase functions:log --only generateOpinions`
 
 ### 테스트

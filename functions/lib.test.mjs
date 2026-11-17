@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validateInput, buildPrompt, normalizeOpinions, clientIp, kstDay, OPINION_SCHEMA } from "./lib.js";
+import { validateInput, buildPrompt, normalizeOpinions, clientIp, kstDay, OPINION_SCHEMA, codeMatches } from "./lib.js";
 
 test("validateInput", () => {
   assert.ok(validateInput(null).error);
@@ -25,4 +25,14 @@ test("clientIp / kstDay", () => {
   assert.equal(clientIp({ headers: { "x-forwarded-for": "1.2.3.4, 10.0.0.1" } }), "1.2.3.4");
   assert.equal(clientIp({ headers: {}, ip: "5.6.7.8" }), "5.6.7.8");
   assert.equal(kstDay(new Date("2026-11-08T15:30:00Z")), "2026-11-09");
+});
+test("codeMatches", () => {
+  assert.equal(codeMatches("체육2026", "체육2026"), true);
+  assert.equal(codeMatches("  ABC ", "abc"), true);
+  assert.equal(codeMatches("abd", "abc"), false);
+  assert.equal(codeMatches("", "abc"), false);
+  assert.equal(codeMatches(undefined, "abc"), false);
+  assert.equal(codeMatches(123, "123"), false);
+  assert.equal(codeMatches("abc", ""), false);
+  assert.equal(codeMatches("x".repeat(201), "x".repeat(201)), false);
 });
