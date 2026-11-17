@@ -150,7 +150,7 @@ body.dragging .wrap{outline:3px dashed var(--accent);outline-offset:4px}
     <div class="meta">
       <label for="subject">과목 <select id="subject"></select></label>
       <label for="grade">학년 <select id="grade"><option value="">선택</option><option>1학년</option><option>2학년</option><option>3학년</option><option>4학년</option><option>5학년</option><option>6학년</option></select></label>
-      <button id="impBtn" type="button">평가 계획서 불러오기 (.hwp)</button>
+      <button id="impBtn" type="button">평가 계획서 불러오기 (.hwp, .hwpx)</button>
       <input type="file" id="impFile" accept=".hwp,.hwpx" hidden>
     </div>
     <div class="imp-msg" id="impMsg" role="status" hidden></div>
@@ -585,7 +585,7 @@ window.addEventListener("pagehide", saveNow);
 
 /* ---------- 평가 계획서(.hwp) 불러오기 ---------- */
 const IMP_ERR = {
-  "not-hwp": "한글(.hwp) 파일이 아니거나 읽을 수 없는 파일입니다.",
+  "not-hwp": "한글(.hwp, .hwpx) 파일이 아니거나 읽을 수 없는 파일입니다.",
   "encrypted": "암호가 걸린 파일은 읽을 수 없습니다. 한글에서 암호를 풀고 저장한 뒤 올려 주세요.",
   "distribution": "배포용 문서는 읽을 수 없습니다. 한글에서 일반 문서로 저장한 뒤 올려 주세요.",
   "old-browser": "이 브라우저에서는 한글 파일을 읽을 수 없습니다. 크롬이나 엣지 최신 버전으로 열어 주세요.",
@@ -599,10 +599,6 @@ async function readImport(file){
   if (!file) return;
   try{
     const buf = await file.arrayBuffer();
-    const head = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
-    if (/\.hwpx$/i.test(file.name) || (head[0]===0x50 && head[1]===0x4b)){
-      impMsg("HWPX 파일은 아직 읽지 못합니다. 한글에서 [파일 → 다른 이름으로 저장]의 파일 형식을 «한글 문서(*.hwp)»로 바꿔 저장한 뒤 올려 주세요.", true); return;
-    }
     const plan = await HwpImport.readPlan(buf);
     if (!plan.subjects.length){ impMsg("파일에서 «평가 영역» 칸이 있는 평가 계획 표를 찾지 못했습니다.", true); return; }
     impPlan = plan; openImport(plan, file.name);
