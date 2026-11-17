@@ -210,62 +210,19 @@ const LV = ["최상","상","중","하"];
 const KEY = "pe-eval-input-v1";
 const uid = () => Math.random().toString(36).slice(2,9);
 
-const EXAMPLE_OPS = {
-"최상":[
-"건강 체력의 요소를 정확히 이해하고 자신의 체력 측정 결과를 분석하여 부족한 요소를 스스로 찾아냄. 체력 증진 계획을 구체적으로 세우고 꾸준히 실천하여 뚜렷한 향상을 보임.",
-"심폐지구력, 근력, 유연성 등 체력 요소별 운동 방법을 정확히 알고 친구들에게 설명할 수 있음. 자신에게 맞는 운동 강도와 횟수를 정해 계획적으로 실천하는 태도가 매우 우수함.",
-"체력 측정에 성실히 참여하여 결과를 바르게 기록하고 변화 과정을 꼼꼼히 비교함. 측정 결과를 바탕으로 생활 속 운동 습관을 만들어 실천하는 모습이 돋보임.",
-"체력 증진의 필요성을 깊이 이해하고 운동 계획을 스스로 점검하고 수정하며 실천함. 어려운 과제에도 끝까지 도전하며 모둠 친구들의 체력 운동을 적극적으로 도움.",
-"왕복오래달리기, 윗몸말아올리기 등 측정 종목의 바른 자세를 정확히 익혀 수행함. 측정 결과를 그래프로 정리하고 목표를 세워 꾸준히 노력하는 자세가 매우 훌륭함.",
-"건강 체력 요소와 이를 기르는 운동을 연결하여 설명하는 능력이 뛰어남. 주간 운동 계획표를 성실히 작성하고 실천 결과를 스스로 평가하며 꾸준히 성장함.",
-"자신의 체력 수준을 객관적으로 파악하고 실천 가능한 목표를 세움. 수업 시간 외에도 줄넘기와 달리기를 꾸준히 실천하여 체력이 크게 향상됨.",
-"체력 운동의 원리를 이해하고 준비 운동과 정리 운동까지 빠짐없이 챙겨 안전하게 운동함. 체력 증진 활동에 언제나 적극적으로 참여하여 다른 학생들에게 좋은 본보기가 됨."],
-"상":[
-"건강 체력의 요소를 잘 이해하고 자신의 체력 측정 결과를 바르게 확인함. 부족한 체력 요소를 기르기 위한 계획을 세워 성실히 실천함.",
-"체력 요소별 운동 방법을 알고 수업 활동에 적극적으로 참여함. 자신의 체력 수준에 맞는 운동을 골라 꾸준히 실천하려고 노력함.",
-"체력 측정 종목의 방법을 잘 익혀 바른 자세로 측정에 참여함. 측정 결과를 기록하고 이를 바탕으로 알맞은 운동 목표를 세움.",
-"체력 증진의 중요성을 알고 운동 계획을 세워 실천하는 태도가 바름. 꾸준한 노력으로 지난 측정보다 향상된 결과를 보임.",
-"심폐지구력과 근지구력을 기르는 운동을 구분하여 설명할 수 있음. 모둠 활동에서 친구들과 협력하며 체력 운동에 성실히 참여함.",
-"자신의 체력 측정 결과를 이해하고 개선할 점을 찾아 기록함. 운동 계획을 대체로 잘 지키며 체력 향상을 위해 노력함.",
-"준비 운동과 정리 운동의 필요성을 알고 바르게 실천함. 체력 운동에 즐겁게 참여하며 맡은 활동을 끝까지 해냄.",
-"체력 요소에 맞는 운동을 알고 생활 속에서 실천하려고 노력함. 체력 측정 결과의 변화를 살피며 목표를 향해 꾸준히 운동함."],
-"중":[
-"건강 체력의 요소를 대략적으로 이해하고 체력 측정에 참여함. 교사의 도움을 받아 체력 증진 계획을 세우고 실천하려고 노력함.",
-"체력 측정 종목의 방법을 알고 측정 활동에 참여함. 측정 결과를 바탕으로 운동 목표를 세우는 데 조금 더 노력이 필요함.",
-"체력 요소별 운동 방법을 일부 이해하고 수업 활동에 참여함. 운동 계획을 꾸준히 실천하는 습관을 기른다면 더욱 성장할 것으로 기대됨.",
-"체력 증진의 필요성을 알고 있으며 주어진 운동 과제를 수행함. 자신의 체력 수준을 살펴보고 부족한 부분을 찾는 연습이 필요함.",
-"체력 운동에 성실하게 참여하려는 태도를 보임. 바른 자세로 운동하는 방법을 익히면 더 좋은 결과를 얻을 수 있을 것임.",
-"친구들과 함께하는 체력 활동에 즐겁게 참여함. 체력 측정 결과를 기록하고 변화를 비교하는 활동에 관심을 가지면 좋겠음.",
-"준비 운동과 정리 운동의 순서를 알고 따라 함. 체력 증진 계획을 스스로 세워 실천하는 경험을 늘려 가면 좋겠음.",
-"기본적인 체력 운동 방법을 익혀 수행할 수 있음. 꾸준한 실천을 통해 체력이 향상되는 기쁨을 느낄 수 있도록 지도가 필요함."],
-"하":[
-"건강 체력의 요소를 이해하는 데 어려움이 있으나 체력 측정에 참여함. 교사와 친구의 도움을 받아 기본적인 운동 방법을 익히고 있음.",
-"체력 측정 종목의 방법을 익히는 중이며 활동에 참여하려고 노력함. 쉬운 운동부터 꾸준히 실천하는 습관을 기를 필요가 있음.",
-"체력 운동에 참여하는 시간이 점차 늘어나고 있음. 자신의 체력 수준을 알고 작은 목표를 세워 실천하도록 격려가 필요함.",
-"체력 증진 활동에 흥미를 가지기 시작함. 바른 자세로 운동하는 방법을 반복하여 익히도록 지속적인 지도가 필요함.",
-"교사의 안내에 따라 준비 운동과 체력 운동에 참여함. 운동 계획을 세우고 실천하는 과정을 단계적으로 연습할 필요가 있음.",
-"모둠 친구들과 함께 체력 활동에 참여하며 조금씩 자신감을 얻고 있음. 생활 속에서 할 수 있는 간단한 운동을 꾸준히 실천하면 좋겠음.",
-"체력 측정 결과를 확인하고 자신의 상태에 관심을 가지기 시작함. 체력 향상을 위해 매일 조금씩 운동하는 습관을 기르도록 지도가 필요함.",
-"기초적인 체력 운동을 따라 하며 끝까지 참여하려고 노력함. 작은 성공 경험을 쌓으며 체력 운동에 대한 자신감을 키워 가고 있음."]
-};
 
 const BASE_SUBJECTS = ["국어","도덕","수학","사회","과학","영어","체육","음악","실과","미술","통합교과","창의적 체험활동"];
 const subjectList = () => [...BASE_SUBJECTS, ...(G.extraSubjects||[]).filter(s=>!BASE_SUBJECTS.includes(s))];
 const KEY2 = "eval-input-v2:";
 const emptyOps = () => ({"최상":[],"상":[],"중":[],"하":[]});
-function defaultState(subject){
-  if (subject !== "체육") return {areas:[{id:uid(), name:"", activity:"", criteria:"", ops:emptyOps()}], rows:[]};
-  const a1 = {id:uid(), name:"건강", activity:"체력 측정(PAPS), 줄넘기 챌린지, 개인 체력 증진 계획표 작성", criteria:"건강 체력의 요소를 이해하고, 자신의 체력 수준을 측정하여 체력 증진 계획을 세워 꾸준히 실천할 수 있다.", ops:JSON.parse(JSON.stringify(EXAMPLE_OPS)), example:true};
-  const a2 = {id:uid(), name:"경쟁", activity:"영역형 게임(플래그 풋볼), 팀별 작전 회의", criteria:"영역형 경쟁 게임의 규칙과 기본 기능을 익히고, 팀원과 협력하여 게임 전략을 세워 실천할 수 있다.", ops:emptyOps()};
-  const sels = ["최상","상","상","중","하"];
-  const rows = sels.map((lv,i)=>({sel:{[a1.id]:lv}, pick:{[a1.id]:i%8}, custom:null}));
-  return {areas:[a1,a2], rows};
+function defaultState(){
+  return {areas:[{id:uid(), name:"", activity:"", criteria:"", ops:emptyOps()}], rows:[]};
 }
 const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e) { return null; } };
 const lsSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) {} };
 
 /* 전역 설정(G): 마지막 과목·학년. 과목별 데이터(S)는 과목마다 따로 저장 */
-let G = lsGet(KEY2+"settings") || {subject:"체육", grade:""};
+let G = lsGet(KEY2+"settings") || {subject:BASE_SUBJECTS[0], grade:""};
 (function migrate(){
   const old = lsGet(KEY);
   if (!G.byGrade && old && Array.isArray(old.areas) && !lsGet(KEY2+"체육")){
@@ -290,13 +247,19 @@ const dataKey = (subject, grade=G.grade) => KEY2 + (grade || "학년미선택") 
 })();
 function load(subject, grade=G.grade){
   let s = lsGet(dataKey(subject, grade));
-  if (!s || !Array.isArray(s.areas)) s = defaultState(subject);
-  s.areas.forEach(a=>{
-    a.activity ??= ""; a.ops ||= emptyOps();
-    if (a.name==="건강 – 체력 증진") a.name="건강";
-    if (a.name==="경쟁 – 영역형 게임") a.name="경쟁";
-  });
+  if (!s || !Array.isArray(s.areas)) s = defaultState();
+  s.areas.forEach(a=>{ a.activity ??= ""; a.ops ||= emptyOps(); });
   s.rows ||= [];
+  /* 예전 체육 예시(건강·경쟁 영역, 예시 학생 5명)가 손대지 않은 채 남아 있으면 지움 */
+  const isOldExample = a => (a.example && a.name==="건강" && /^건강 체력의 요소를 이해하고/.test(a.criteria||"")) ||
+    (a.name==="경쟁" && a.activity==="영역형 게임(플래그 풋볼), 팀별 작전 회의" && /^영역형 경쟁 게임의 규칙과 기본 기능/.test(a.criteria||"") && !LV.some(l=>a.ops[l].length));
+  const gone = new Set(s.areas.filter(isOldExample).map(a=>a.id));
+  if (gone.size){
+    s.areas = s.areas.filter(a=>!gone.has(a.id));
+    s.rows.forEach(r=>{ for (const id of gone){ delete r.sel?.[id]; delete r.pick?.[id]; } });
+    if (s.rows.every(r=>!Object.keys(r.sel||{}).length && r.custom==null)) s.rows = [];
+    if (!s.areas.length) s.areas = defaultState().areas;
+  }
   return s;
 }
 let S = load(G.subject);
