@@ -81,8 +81,28 @@
 
   class HwpError extends Error { constructor(code) { super(code); this.code = code; } }
 
+  /* 압축 풀기 기능(DecompressionStream)이 없는 오래된 브라우저용: pako를 그때만 불러옴 */
+  let pakoP = null;
+  function loadPako() {
+    if (root.pako) return Promise.resolve(root.pako);
+    if (typeof document === "undefined") return Promise.reject(new HwpError("old-browser"));
+    pakoP ||= new Promise((ok, no) => {
+      const sc = document.createElement("script");
+      sc.src = "https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako_inflate.min.js";
+      sc.onload = () => (root.pako ? ok(root.pako) : no(new HwpError("old-browser")));
+      sc.onerror = () => { pakoP = null; no(new HwpError("old-browser")); };
+      document.head.appendChild(sc);
+    });
+    return pakoP;
+  }
   async function inflateRaw(u8) {
-    if (typeof DecompressionStream === "undefined") throw new HwpError("old-browser");
+    if (typeof DecompressionStream === "undefined") {
+      const pako = await loadPako();
+      const inf = new pako.Inflate({ raw: true });
+      inf.push(u8, true);
+      if (inf.result && inf.result.length) return inf.result;
+      throw new HwpError("not-hwp");
+    }
     /* 한글 파일은 압축 데이터 뒤에 여분 바이트가 붙는 경우가 있어, 브라우저가 끝에서
        오류를 내도 그때까지 풀린 내용을 씁니다. */
     const reader = new Blob([u8]).stream().pipeThrough(new DecompressionStream("deflate-raw")).getReader();
@@ -203,27 +223,68 @@
     return tables;
   }
 
-  async function readHwpxTables(buf) {
+  /* 워드(.docx): word/document.xml 의 w:tbl (가로 병합 gridSpan, 세로 병합 vMerge) */
+  function docxTables(doc) {
+    const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    const val = (el) => el && (el.getAttribute("w:val") ?? el.getAttributeNS(W, "val"));
+    const tables = [];
+    for (const tbl of allIn(doc, "tbl")) {
+      const t = { rows: 0, cols: 0, cells: [] };
+      kids(tbl, "tr").forEach((tr, ri) => {
+        const trPr = kids(tr, "trPr")[0];
+        let ci = +(val(trPr && kids(trPr, "gridBefore")[0]) || 0);
+        for (const tc of kids(tr, "tc")) {
+          const pr = kids(tc, "tcPr")[0];
+          const cs = +(val(pr && kids(pr, "gridSpan")[0]) || 1);
+          const vm = pr && kids(pr, "vMerge")[0];
+          if (vm && val(vm) !== "restart") {
+            const above = t.cells.find((x) => x.c === ci && x.r + x.rs === ri);
+            if (above) { above.rs++; ci += cs; continue; }
+          }
+          const lines = kids(tc, "p").map((pp) => {
+            let s = "";
+            for (const el of [...pp.getElementsByTagName("*")]) {
+              const n = local(el);
+              if (n === "t") s += el.textContent;
+              else if (n === "tab") s += " ";
+              else if (n === "br" || n === "cr") s += "\n";
+            }
+            return s;
+          });
+          t.cells.push({ r: ri, c: ci, rs: 1, cs, lines });
+          ci += cs;
+        }
+        t.rows = ri + 1; t.cols = Math.max(t.cols, ci);
+      });
+      tables.push(t);
+    }
+    return tables;
+  }
+
+  const finishText = (tables) => { for (const t of tables) for (const c of t.cells) c.text = c.lines.join("\n").replace(/[ \t ]+/g, " ").replace(/ *\n */g, "\n").trim(); return tables; };
+
+  async function readZipTables(buf) {
     if (typeof DOMParser === "undefined") throw new HwpError("old-browser");
     const zip = await readZip(buf), dec = new TextDecoder();
+    const xml = async (nm) => {
+      const doc = new DOMParser().parseFromString(dec.decode(await zip.read(nm)), "application/xml");
+      if (doc.getElementsByTagName("parsererror").length) throw new HwpError("not-hwp");
+      return doc;
+    };
+    if (zip.names.includes("word/document.xml")) return finishText(docxTables(await xml("word/document.xml")));
     const manifest = await zip.read("META-INF/manifest.xml");
     if (manifest && /encryption-data/.test(dec.decode(manifest))) throw new HwpError("encrypted");
     const sections = zip.names.filter((nm) => /^Contents\/section\d+\.xml$/i.test(nm))
       .sort((a, b) => +a.match(/(\d+)\.xml$/i)[1] - +b.match(/(\d+)\.xml$/i)[1]);
     if (!sections.length) throw new HwpError("not-hwp");
     const tables = [];
-    for (const nm of sections) {
-      const doc = new DOMParser().parseFromString(dec.decode(await zip.read(nm)), "application/xml");
-      if (doc.getElementsByTagName("parsererror").length) throw new HwpError("not-hwp");
-      tables.push(...xmlTables(doc));
-    }
-    for (const t of tables) for (const c of t.cells) c.text = c.lines.join("\n").replace(/[ \t ]+/g, " ").replace(/ *\n */g, "\n").trim();
-    return tables;
+    for (const nm of sections) tables.push(...xmlTables(await xml(nm)));
+    return finishText(tables);
   }
 
   async function readTables(buf) {
     const head = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
-    if (head[0] === 0x50 && head[1] === 0x4b && head[2] === 3 && head[3] === 4) return readHwpxTables(buf);
+    if (head[0] === 0x50 && head[1] === 0x4b && head[2] === 3 && head[3] === 4) return readZipTables(buf);
     const cfb = readCfb(buf);
     const header = cfb.find("FileHeader");
     if (!header) throw new HwpError("not-hwp");
@@ -245,26 +306,31 @@
   /* ---------- 3. 평가 계획 표 해석 ---------- */
   const squash = (s) => String(s || "").replace(/\s+/g, "");
   const oneLine = (s) => String(s || "").replace(/\s*\n\s*/g, " ").replace(/\s+/g, " ").trim();
-  /* 줄바꿈으로 갈라진 낱말 잇기: "노력\n요함" → "노력 요함" */
-  const LEVEL_NAMES = [["매우잘함", "매우 잘함"], ["잘함", "잘함"], ["보통", "보통"], ["노력요함", "노력 요함"]];
+  /* 성취 수준 이름 (줄바꿈으로 갈라진 "노력\n요함"도 같은 것으로) */
+  const LEVEL_NAMES = { "매우잘함": "매우 잘함", "잘함": "잘함", "보통": "보통", "노력요함": "노력 요함", "최상": "최상", "상": "상", "중": "중", "하": "하", "우수": "우수", "미흡": "미흡", "A": "A", "B": "B", "C": "C", "D": "D", "E": "E" };
+  const levelName = (t) => { const q = squash(t).replace(/[()（）]/g, ""); return LEVEL_NAMES[q] || ""; };
 
+  /* 머리글 칸 이름 → 열 종류 (위에서부터 먼저 맞는 것) */
   const HEAD = [
-    ["standard", /^성취기준$/],
-    ["unit", /^단원/],
-    ["area", /^평가영역$/],
-    ["element", /^평가요소$/],
+    ["standard", /성취기준/],
+    ["levels", /성취수준|도달수준|수준별/],
+    ["criteria", /평가기준|채점기준/],
+    ["area", /^(평가)?영역(명)?$|^평가영역/],
+    ["element", /평가요소|평가내용/],
+    ["view", /평가관점|평가착안점/],
     ["method", /수업.?평가방법|주안점/],
-    ["levels", /^성취수준$/],
-    ["view", /^평가관점$/],
-    ["way", /^평가방법$/],
+    ["way", /^평가(방법|도구|유형)$/],
+    ["unit", /^단원/],
     ["when", /^(평가)?시기$/],
   ];
+  const headKind = (text) => { const q = squash(text); const k = HEAD.find(([, re]) => re.test(q)); return k ? k[0] : (levelName(q) ? "level" : ""); };
+  const CRIT_KINDS = ["standard", "levels", "criteria", "view", "level"];
 
   function subjectFromTitle(text) {
     const t = oneLine(text);
     const m = t.match(/^(.+?)과?\s*교수\s*[·•]?\s*학습/) || t.match(/^(.+?)(과)?\s*평가\s*(운영)?\s*계획/);
     if (!m) return "";
-    return m[1].replace(/과$/, "").replace(/^\d{4}학년도\s*\d학년\s*\d학기\s*/, "").trim();
+    return m[1].replace(/과$/, "").replace(/^\d{4}학년도\s*(\d학년\s*)?(\d학기\s*)?/, "").trim();
   }
   const normalizeSubject = (s) => (/^창의적\s*체험\s*활동$/.test(s) ? "창의적 체험활동" : s);
 
@@ -275,15 +341,30 @@
 
   function parseTable(t, lastTitle) {
     const at = (r, c) => t.cells.find((x) => x.r <= r && r < x.r + x.rs && x.c <= c && c < x.c + x.cs);
-    const headerRow = [...new Set(t.cells.map((c) => c.r))].sort((a, b) => a - b)
-      .find((r) => t.cells.some((c) => c.r === r && squash(c.text) === "평가영역"));
+    const rowsOf = [...new Set(t.cells.map((c) => c.r))].sort((a, b) => a - b);
+    /* 머리글 줄: «평가 영역» 칸과 평가 기준 계열 칸(성취기준·평가 기준·성취 수준·평가 관점)이 함께 있는 줄 */
+    const headerRow = rowsOf.find((r) => {
+      const kinds = t.cells.filter((c) => c.r === r).map((c) => headKind(c.text));
+      return kinds.includes("area") && kinds.some((k) => CRIT_KINDS.includes(k));
+    });
     if (headerRow == null) return null;
     const col = {};
+    const levelCols = [];   // 수준이 열로 나뉜 표: [{c, label}]
     for (const c of t.cells.filter((x) => x.r === headerRow)) {
-      const k = HEAD.find(([, re]) => re.test(squash(c.text)));
-      if (k && col[k[0]] == null) col[k[0]] = { c: c.c, cs: c.cs };
+      const k = headKind(c.text);
+      if (k === "level") levelCols.push({ c: c.c, label: LEVEL_NAMES[squash(c.text)] || oneLine(c.text) });
+      else if (k && col[k] == null) col[k] = { c: c.c, cs: c.cs, rs: c.rs };
     }
-    if (!col.area) return null;
+    /* 두 줄 머리글: «평가 기준» 아래에 상·중·하 같은 작은 칸들이 있으면 수준 열 */
+    let dataStart = headerRow + 1;
+    const sub = t.cells.filter((x) => x.r === headerRow + 1 && levelName(x.text));
+    const group = ["levels", "criteria"].map((k) => col[k]).find((h) => h && h.cs > 1 && h.rs === 1);
+    const startsNext = t.cells.filter((x) => x.r === headerRow + 1);
+    if (group && sub.length >= 2 && startsNext.every((x) => x.c >= group.c && x.c < group.c + group.cs)) {
+      sub.forEach((x) => levelCols.push({ c: x.c, label: LEVEL_NAMES[squash(x.text).replace(/[()（）]/g, "")] || oneLine(x.text) }));
+      if (col.levels === group) delete col.levels; else delete col.criteria;
+      dataStart = headerRow + 2;
+    }
 
     let subject = "", grade = "";
     for (const c of t.cells.filter((x) => x.r < headerRow)) {
@@ -291,14 +372,16 @@
       grade ||= (c.text.match(/(?:^|[^\d])([1-6])\s*학년(?!도)/) || [])[1] || "";
     }
     subject = normalizeSubject(subject || subjectFromTitle(lastTitle || ""));
+    if (!grade) grade = (String(lastTitle || "").match(/(?:^|[^\d])([1-6])\s*학년(?!도)/) || [])[1] || "";
 
     /* 평가 요소 칸 하나 = 영역 카드 하나 (요소 칸이 없으면 영역 칸 기준) */
     const keyCol = (col.element || col.area).c;
-    const keys = t.cells.filter((c) => c.r > headerRow && c.c === keyCol && c.text).sort((a, b) => a.r - b.r);
+    const keys = t.cells.filter((c) => c.r >= dataStart && c.c === keyCol && c.text).sort((a, b) => a.r - b.r);
     const areas = [];
     for (const k of keys) {
-      const get = (name) => { const h = col[name]; if (!h) return ""; const c = at(k.r, h.c); return c ? c.text : ""; };
+      const get = (name) => { const h = col[name]; if (!h) return ""; const c = at(k.r, h.c); return c && c.r >= dataStart ? c.text : ""; };
       const name = oneLine(get("area"));
+      if (headKind(name) === "area") continue;   // 표 중간에 머리글이 반복되는 경우
       const elements = cleanList(col.element ? k.text : "");
       const tags = [...new Set([...methodTags(get("method")), ...cleanList(get("way")).flatMap((s) => s.split(/\s*,\s*/))])].filter(Boolean);
       let activity = elements.join("\n");
@@ -307,19 +390,25 @@
       const parts = [];
       const std = oneLine(get("standard"));
       if (std) parts.push(std);
-      if (col.levels) {
+      /* 수준이 줄로 나뉜 표: «성취 수준» 아래 [수준 이름 | 설명] */
+      const lv = col.levels || (col.criteria && col.criteria.cs > 1 ? col.criteria : null);
+      if (lv && lv.cs > 1) {
         for (let r = k.r; r < k.r + k.rs; r++) {
-          const label = at(r, col.levels.c), desc = col.levels.cs > 1 ? at(r, col.levels.c + 1) : null;
+          const label = at(r, lv.c), desc = at(r, lv.c + 1);
           if (!label || label.r !== r) continue;
-          const ln = LEVEL_NAMES.find(([sq]) => squash(label.text) === sq);
-          const d = desc && desc !== label ? oneLine(desc.text) : "";
-          if (ln && d) parts.push(`${ln[1]}: ${d}`);
+          const ln = levelName(label.text), d = desc && desc !== label ? oneLine(desc.text) : "";
+          if (ln && d) parts.push(`${LEVEL_NAMES[squash(label.text).replace(/[()（）]/g, "")]}: ${d}`);
+          else if (d) parts.push(d);
         }
+      } else if (lv) {
+        parts.push(...cleanList(get(col.levels ? "levels" : "criteria")));
       }
-      const view = cleanList(get("view"));
-      if (view.length) parts.push(...view);
-      if (!name && !parts.length && !activity) continue;
-      areas.push({ name, activity, criteria: parts.join("\n") });
+      if (col.criteria && col.criteria !== lv) parts.push(...cleanList(get("criteria")));
+      /* 수준이 열로 나뉜 표: 머리글이 상·중·하 */
+      for (const L of levelCols) { const c = at(k.r, L.c); const d = c && c !== k ? oneLine(c.text) : ""; if (d) parts.push(`${L.label}: ${d}`); }
+      parts.push(...cleanList(get("view")));
+      if (!name && !parts.length) continue;
+      areas.push({ name, activity, criteria: [...new Set(parts)].join("\n") });
     }
     /* 같은 이름의 영역이 여러 개면 번호를 붙여 구분 */
     const count = {};
@@ -333,7 +422,7 @@
     const subjects = [];
     let grade = "", lastTitle = "";
     for (const t of tables) {
-      if (t.cells.length === 1) { lastTitle = t.cells[0].text; continue; }
+      if (t.cells.length <= 2) { lastTitle = t.cells.map((c) => c.text).join(" "); continue; }
       const p = parseTable(t, lastTitle);
       if (!p || !p.areas.length) continue;
       grade ||= p.grade;
@@ -343,7 +432,12 @@
     return { grade, subjects };
   }
 
-  async function readPlan(buf) { return planFromTables(await readTables(buf)); }
+  /* 평가 영역과 평가 기준(성취기준·평가 기준·성취 수준·평가 관점)이 있는 표를 하나도 못 찾으면 not-plan */
+  async function readPlan(buf) {
+    const plan = planFromTables(await readTables(buf));
+    if (!plan.subjects.length) throw new HwpError("not-plan");
+    return plan;
+  }
 
   const api = { readPlan, readTables, planFromTables, HwpError };
   root.HwpImport = api;
