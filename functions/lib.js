@@ -2,7 +2,8 @@ import { createHash, timingSafeEqual } from "node:crypto";
 /* 의견 생성 서버의 순수 로직 (네트워크·Firebase 없이 테스트 가능) */
 
 export const LEVELS = ["최상", "상", "중", "하"];
-export const PER_LEVEL = 8;
+/* 수준별 의견 개수: 최상·상을 많이 쓰므로 더 많이 */
+export const COUNTS = { "최상": 10, "상": 10, "중": 5, "하": 5 };
 
 /* 요청을 받을 웹 주소. 다른 사이트에서 이 서버를 쓰지 못하게 막습니다. */
 export const ALLOWED_ORIGINS = [
@@ -42,7 +43,7 @@ export function buildPrompt({ subject, grade, name, activity, criteria }) {
 
 규칙:
 - 주요 활동이 있으면 의견에 그 활동 이름이나 장면을 자연스럽게 녹여 구체적으로 씁니다.
-- 성취 수준 "최상", "상", "중", "하" 각각 서로 다른 의견을 정확히 8개씩 씁니다.
+- 성취 수준별로 서로 다른 의견을 정확히 이만큼 씁니다: "최상" ${COUNTS["최상"]}개, "상" ${COUNTS["상"]}개, "중" ${COUNTS["중"]}개, "하" ${COUNTS["하"]}개.
 - 의견 하나는 반드시 정확히 두 문장입니다. 각 문장은 마침표로 끝납니다.
 - 생활기록부 문체: 명사형 종결("~함.", "~임.", "~보임.", "~필요함." 등). 학생 이름이나 "학생은", "이 학생은" 같은 주어는 쓰지 않습니다.
 - 평가 기준의 구체적인 지식·기능·태도 요소를 근거로 관찰 가능한 행동을 서술합니다.
@@ -70,7 +71,7 @@ export function normalizeOpinions(text) {
     ops[lv] = (Array.isArray(o[lv]) ? o[lv] : [])
       .map((s) => String(s).replace(/\s+/g, " ").trim())
       .filter(Boolean)
-      .slice(0, PER_LEVEL);
+      .slice(0, COUNTS[lv]);
   }
   return LEVELS.some((l) => ops[l].length) ? ops : null;
 }

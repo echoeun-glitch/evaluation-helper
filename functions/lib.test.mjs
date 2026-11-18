@@ -12,14 +12,14 @@ test("validateInput", () => {
 });
 test("buildPrompt", () => {
   const p = buildPrompt({ subject: "체육", grade: "5학년", name: "표현", activity: "", criteria: "리듬 표현" });
-  assert.match(p, /초등학교 5학년 체육/); assert.match(p, /주요 활동: \(없음\)/); assert.match(p, /평가 기준: 리듬 표현/);
+  assert.match(p, /초등학교 5학년 체육/); assert.match(p, /주요 활동: \(없음\)/); assert.match(p, /평가 기준: 리듬 표현/); assert.match(p, /"최상" 10개, "상" 10개, "중" 5개, "하" 5개/);
 });
 test("schema", () => { assert.deepEqual(OPINION_SCHEMA.required, ["최상","상","중","하"]); assert.equal(OPINION_SCHEMA.additionalProperties, false); });
 test("normalizeOpinions", () => {
   assert.equal(normalizeOpinions("not json"), null);
   assert.equal(normalizeOpinions('{"최상":[]}'), null);
-  const o = normalizeOpinions(JSON.stringify({ 최상: Array(10).fill(" a  b "), 상: ["x"], 중: [], 하: [""] }));
-  assert.equal(o.최상.length, 8); assert.equal(o.최상[0], "a b"); assert.deepEqual(o.하, []);
+  const o = normalizeOpinions(JSON.stringify({ 최상: Array(12).fill(" a  b "), 상: ["x"], 중: Array(7).fill("y"), 하: [""] }));
+  assert.equal(o.최상.length, 10); assert.equal(o.중.length, 5); assert.equal(o.최상[0], "a b"); assert.deepEqual(o.하, []);
 });
 test("clientIp / kstDay", () => {
   assert.equal(clientIp({ headers: { "x-forwarded-for": "1.2.3.4, 10.0.0.1" } }), "1.2.3.4");
