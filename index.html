@@ -174,7 +174,7 @@ try { if (!localStorage.getItem("eval-input-v2:access")) document.body.classList
 <div class="wrap">
   <header>
     <h1>평가 입력기</h1>
-    <p>평가 영역별 기준을 넣으면 최상·상·중·하 의견을 8개씩 만듭니다. 학생마다 척도를 고르면 영역별 문장을 조합해 바로 복사할 수 있어요. 과목을 바꾸면 과목별로 따로 저장됩니다.</p>
+    <p>평가 영역별 기준을 넣으면 의견을 최상·상 10개씩, 중·하 5개씩 만듭니다. 학생마다 척도를 고르면 영역별 문장을 조합해 바로 복사할 수 있어요. 과목을 바꾸면 과목별로 따로 저장됩니다.</p>
     <p class="hint">입력한 내용은 이 브라우저에만 저장됩니다. «의견 생성»을 누를 때만 과목·학년·영역 이름·주요 활동·평가 기준이 AI 서버로 전송되며, 학생 표의 내용은 보내지 않습니다.</p>
     <div class="meta">
       <label for="subject">과목 <select id="subject"></select></label>
@@ -231,6 +231,9 @@ try { if (!localStorage.getItem("eval-input-v2:access")) document.body.classList
 <script src="hwp-import.js?v=2026-11-17"></script><!-- 고칠 때마다 v를 바꿔 예전 파일이 남지 않게 -->
 <script>
 const LV = ["최상","상","중","하"];
+/* 수준별 의견 개수: 최상·상을 많이 쓰므로 더 많이 (서버 functions/lib.js의 COUNTS와 같게) */
+const COUNT = {"최상":10, "상":10, "중":5, "하":5};
+const TOTAL = LV.reduce((n,l)=>n+COUNT[l], 0);
 const KEY = "pe-eval-input-v1";
 const uid = () => Math.random().toString(36).slice(2,9);
 
@@ -330,7 +333,7 @@ function renderAreas(){
       </div>
       <div class="levels">
         ${LV.map((lv,j)=>`<div class="lv">
-          <div class="lv-h"><span class="chip c${j+1}">${lv}</span><small id="lc-${a.id}-${j}">${(a.ops[lv]||[]).length}/8</small></div>
+          <div class="lv-h"><span class="chip c${j+1}">${lv}</span><small id="lc-${a.id}-${j}">${(a.ops[lv]||[]).length}/${COUNT[lv]}</small></div>
           <div class="ops" id="ops-${a.id}-${j}">${opsHTML(a,lv,j)}</div>
         </div>`).join("")}
       </div>
@@ -339,7 +342,7 @@ function renderAreas(){
 }
 const hasOps = a => LV.some(l => (a.ops[l]||[]).length);
 function opsHTML(a, lv, j){
-  const L = a.ops[lv]||[]; const n = Math.max(8, L.length);
+  const L = a.ops[lv]||[]; const n = Math.max(COUNT[lv], L.length);
   return [...Array(n).keys()].map(k=>`<textarea class="opi o${k%4+1}" id="op-${a.id}-${j}-${k}" data-lv="${lv}" data-k="${k}" rows="2" aria-label="${lv} 의견 ${k+1}" placeholder="의견 ${k+1}">${esc(L[k]||"")}</textarea>`).join("");
 }
 function fit(t){ if (CSS.supports && CSS.supports("field-sizing","content")) return; t.style.height="auto"; t.style.height=t.scrollHeight+2+"px"; }
@@ -367,7 +370,7 @@ $("#areas").addEventListener("input", e=>{
       fit(el);
     }
     a.example = false;
-    $("#lc-"+a.id+"-"+j).textContent = a.ops[lv].length+"/8";
+    $("#lc-"+a.id+"-"+j).textContent = a.ops[lv].length+"/"+COUNT[lv];
     refreshTexts();
   }
   save();
@@ -401,7 +404,7 @@ function buildPrompt(a){ return `당신은 초등학교 ${G.grade||""} ${G.subje
 
 규칙:
 - 주요 활동이 있으면 의견에 그 활동 이름이나 장면을 자연스럽게 녹여 구체적으로 씁니다.
-- 성취 수준 "최상", "상", "중", "하" 각각 서로 다른 의견을 정확히 8개씩 씁니다.
+- 성취 수준별로 서로 다른 의견을 정확히 이만큼 씁니다: "최상" ${COUNT["최상"]}개, "상" ${COUNT["상"]}개, "중" ${COUNT["중"]}개, "하" ${COUNT["하"]}개.
 - 의견 하나는 반드시 정확히 두 문장입니다. 각 문장은 마침표로 끝납니다.
 - 생활기록부 문체: 명사형 종결("~함.", "~임.", "~보임.", "~필요함." 등). 학생 이름이나 "학생은", "이 학생은" 같은 주어는 쓰지 않습니다.
 - 평가 기준의 구체적인 지식·기능·태도 요소를 근거로 관찰 가능한 행동을 서술합니다.
@@ -409,14 +412,14 @@ function buildPrompt(a){ return `당신은 초등학교 ${G.grade||""} ${G.subje
 - 같은 수준 안에서 첫 어절과 표현이 겹치지 않게 다양하게 씁니다. 의견 하나는 60~110자 정도.
 
 다음 JSON 객체 하나만 답하세요(다른 텍스트 없이):
-{"최상":["...",...8개],"상":[...8개],"중":[...8개],"하":[...8개]}`; }
+{"최상":["...",...${COUNT["최상"]}개],"상":[...${COUNT["상"]}개],"중":[...${COUNT["중"]}개],"하":[...${COUNT["하"]}개]}`; }
 
 /* AI 답변(JSON 또는 '최상/상/중/하' 제목 + 줄 목록)을 읽어 의견으로 변환 */
 function parseReply(txt){
   let t = String(txt||"").trim();
   const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/); if (fence) t = fence[1].trim();
   const i = t.indexOf("{"), j = t.lastIndexOf("}");
-  if (i>=0 && j>i){ try{ const o = JSON.parse(t.slice(i,j+1)); const ops={}; for(const lv of LV) ops[lv]=(Array.isArray(o[lv])?o[lv]:[]).map(s=>String(s).replace(/\s+/g," ").trim()).filter(Boolean).slice(0,8); if(LV.some(l=>ops[l].length)) return ops; }catch(e){} }
+  if (i>=0 && j>i){ try{ const o = JSON.parse(t.slice(i,j+1)); const ops={}; for(const lv of LV) ops[lv]=(Array.isArray(o[lv])?o[lv]:[]).map(s=>String(s).replace(/\s+/g," ").trim()).filter(Boolean).slice(0,COUNT[lv]); if(LV.some(l=>ops[l].length)) return ops; }catch(e){} }
   const ops = emptyOps(); let cur = null;
   for (let line of String(txt).split("\n")){
     line = line.trim(); if(!line) continue;
@@ -424,14 +427,14 @@ function parseReply(txt){
     if (LV.includes(h)) { cur = h; continue; }
     if (cur){ line = line.replace(/^(\d+[.)]|[-•*])\s*/,"").replace(/^"|",?$/g,"").trim(); if(line) ops[cur].push(line); }
   }
-  for (const lv of LV) ops[lv] = ops[lv].slice(0,8);
+  for (const lv of LV) ops[lv] = ops[lv].slice(0,COUNT[lv]);
   return LV.some(l=>ops[l].length) ? ops : null;
 }
 function applyOps(id, ops){
   const a = S.areas.find(x=>x.id===id);
   a.ops = ops; a.example = false; renderAll(); save();
-  const short = LV.filter(l=>ops[l].length<8);
-  setStatus(id, short.length ? `${short.join(", ")} 의견이 8개보다 적습니다. 직접 보충하거나 다시 생성해 주세요.` : "의견 32개를 넣었습니다. 필요하면 직접 다듬어 주세요.", !!short.length);
+  const short = LV.filter(l=>ops[l].length<COUNT[l]);
+  setStatus(id, short.length ? `${short.join(", ")} 의견이 정해진 개수보다 적습니다. 직접 보충하거나 다시 생성해 주세요.` : `의견 ${TOTAL}개를 넣었습니다. 필요하면 직접 다듬어 주세요.`, !!short.length);
 }
 /* 의견 생성 서버 주소 (functions/ 를 배포한 주소). 비우면 «직접 AI에 묻기» 방식만 씁니다. */
 const API_URL = "https://asia-northeast3-teachingdiary-d14d5.cloudfunctions.net/generateOpinions";
@@ -440,7 +443,7 @@ async function generate(id, btn){
   if (!a.criteria.trim()){ setStatus(id,"평가 기준을 먼저 입력해 주세요.",true); $("#ac-"+id).focus(); return; }
   if (!API_URL || API_URL.startsWith("__")){ $("#gp-"+id).hidden=false; setStatus(id,""); return; }
   btn.disabled = true; const old = btn.textContent; btn.textContent = "생성 중…";
-  setStatus(id,"AI가 의견 32개를 쓰고 있어요. 30초~1분 정도 걸립니다.");
+  setStatus(id,`AI가 의견 ${TOTAL}개를 쓰고 있어요. 30초~1분 정도 걸립니다.`);
   try{
     const res = await fetch(API_URL, {method:"POST", headers:{"content-type":"application/json"},
       body: JSON.stringify({accessCode:accessCode(), subject:G.subject, grade:G.grade||"", name:a.name, activity:a.activity||"", criteria:a.criteria})});
