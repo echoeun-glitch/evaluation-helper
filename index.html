@@ -423,19 +423,35 @@ function buildPrompt(a){ return `당신은 초등학교 ${G.grade||""} ${G.subje
 
 /* AI 답변(JSON 또는 '최상/상/중/하' 제목 + 줄 목록)을 읽어 의견으로 변환 */
 function parseReply(txt){
-  let t = String(txt||"").trim();
+  /* 둥근 따옴표(“ ” ″ ＂)·전각 기호를 곧은 따옴표로 */
+  let t = String(txt||"").replace(/[“”„‟″＂]/g,'"').replace(/[‘’]/g,"'").replace(/［/g,"[").replace(/］/g,"]").replace(/｛/g,"{").replace(/｝/g,"}").trim();
   const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/); if (fence) t = fence[1].trim();
+  const clean = L => L.map(s=>String(s).replace(/\s+/g," ").trim()).filter(Boolean);
+  const done = ops => { for (const lv of LV) ops[lv] = clean(ops[lv]||[]).slice(0,COUNT[lv]); return LV.some(l=>ops[l].length) ? ops : null; };
+  /* 1) 올바른 JSON */
   const i = t.indexOf("{"), j = t.lastIndexOf("}");
-  if (i>=0 && j>i){ try{ const o = JSON.parse(t.slice(i,j+1)); const ops={}; for(const lv of LV) ops[lv]=(Array.isArray(o[lv])?o[lv]:[]).map(s=>String(s).replace(/\s+/g," ").trim()).filter(Boolean).slice(0,COUNT[lv]); if(LV.some(l=>ops[l].length)) return ops; }catch(e){} }
+  if (i>=0 && j>i){ try{ const o = JSON.parse(t.slice(i,j+1)); const r = done(Object.fromEntries(LV.map(lv=>[lv, Array.isArray(o[lv])?o[lv]:[]]))); if (r) return r; }catch(e){} }
+  /* 2) JSON 모양이지만 깨진 답: 앞뒤가 잘리거나 따옴표·괄호가 빠진 경우 → 최상/상/중/하 뒤의 [ ... ] 를 직접 읽음 */
+  const keyRe = /(?:^|[^가-힣])"?(최상|상|중|하)"?\s*[:：]\s*\[/g;
+  const keys = [...t.matchAll(keyRe)].map(m=>({lv:m[1], from:m.index+m[0].length, at:m.index}));
+  if (keys.length){
+    const ops = emptyOps();
+    keys.forEach((k,n)=>{
+      let seg = t.slice(k.from, n+1<keys.length ? keys[n+1].at+1 : t.length);
+      seg = seg.replace(/[\]\s,}]*$/,"").replace(/^\s*"?/,"").replace(/"?\s*$/,"");
+      ops[k.lv].push(...seg.split(/"\s*,\s*"/).map(x=>x.replace(/^[\s"\[]+|[\s"\],]+$/g,"")));
+    });
+    const r = done(ops); if (r) return r;
+  }
+  /* 3) 제목 + 줄 목록 ("최상" 다음 줄부터 한 줄에 의견 하나) */
   const ops = emptyOps(); let cur = null;
-  for (let line of String(txt).split("\n")){
+  for (let line of t.split("\n")){
     line = line.trim(); if(!line) continue;
     const h = line.replace(/[#*\[\]():：\s]/g,"");
     if (LV.includes(h)) { cur = h; continue; }
     if (cur){ line = line.replace(/^(\d+[.)]|[-•*])\s*/,"").replace(/^"|",?$/g,"").trim(); if(line) ops[cur].push(line); }
   }
-  for (const lv of LV) ops[lv] = ops[lv].slice(0,COUNT[lv]);
-  return LV.some(l=>ops[l].length) ? ops : null;
+  return done(ops);
 }
 function applyOps(id, ops){
   const a = S.areas.find(x=>x.id===id);
