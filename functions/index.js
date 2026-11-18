@@ -25,7 +25,7 @@ const MAX_WRONG_CODES = 20;   // 하루에 입장 코드를 이만큼 틀리면 
 const DAILY_LIMIT_PER_USER = defineInt("DAILY_LIMIT_PER_USER", { default: 30 });
 const DAILY_LIMIT_TOTAL = defineInt("DAILY_LIMIT_TOTAL", { default: 300 });
 
-const MODEL = "claude-opus-5-5";
+const MODEL = "claude-sonnet-5-5";   // Opus의 절반 요금
 
 initializeApp();
 const db = getFirestore();

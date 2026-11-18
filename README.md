@@ -61,7 +61,7 @@ Firebase Functions 2세대 함수 `generateOpinions` 하나입니다.
 | Firebase 프로젝트 | `teachingdiary-d14d5` (`.firebaserc`) |
 | 지역 | `asia-northeast3` (서울) |
 | 주소 | `https://asia-northeast3-teachingdiary-d14d5.cloudfunctions.net/generateOpinions` (`index.html`의 `API_URL`) |
-| 모델 | `claude-opus-5-5`, 구조화 출력(JSON 스키마)으로 형식 고정, 거절 시 서버 측 대체 모델 사용 |
+| 모델 | `claude-sonnet-5-5`(요금: 입력 100만 토큰당 2달러, 출력 10달러), 구조화 출력(JSON 스키마)으로 형식 고정, 거절 시 서버 측 대체 모델 사용 |
 | 허용 주소(CORS) | `https://echoeun-glitch.github.io`, `localhost:5000/8080` (`functions/lib.js`의 `ALLOWED_ORIGINS`) |
 | 사용 한도 | 사용자(IP)당 하루 30회, 전체 하루 300회 (한국 시간 기준, 바꿀 수 있음) |
 
