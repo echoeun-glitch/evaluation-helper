@@ -332,7 +332,9 @@
     if (!m) return "";
     return m[1].replace(/과$/, "").replace(/^\d{4}학년도\s*(\d학년\s*)?(\d학기\s*)?/, "").trim();
   }
-  const normalizeSubject = (s) => (/^창의적\s*체험\s*활동$/.test(s) ? "창의적 체험활동" : s);
+  /* 띄어쓰기가 달라도 같은 과목으로: "바른생활" → "바른 생활" */
+  const SUBJECT_NAMES = { "창의적체험활동": "창의적 체험활동", "바른생활": "바른 생활", "즐거운생활": "즐거운 생활", "슬기로운생활": "슬기로운 생활" };
+  const normalizeSubject = (s) => SUBJECT_NAMES[String(s || "").replace(/\s+/g, "")] || s;
 
   function cleanList(text) {
     return String(text || "").split("\n").map((l) => l.replace(/^\s*(?:[-•·▪◦○●■□※]|\d+[.)])\s*/, "").trim()).filter(Boolean);
