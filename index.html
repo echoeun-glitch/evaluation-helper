@@ -228,7 +228,7 @@ try { if (!localStorage.getItem("eval-input-v2:access")) document.body.classList
   </form>
 </dialog>
 
-<script src="hwp-import.js?v=2026-11-17"></script><!-- 고칠 때마다 v를 바꿔 예전 파일이 남지 않게 -->
+<script src="hwp-import.js?v=2026-11-18"></script><!-- 고칠 때마다 v를 바꿔 예전 파일이 남지 않게 -->
 <script>
 const LV = ["최상","상","중","하"];
 /* 수준별 의견 개수: 최상·상을 많이 쓰므로 더 많이 (서버 functions/lib.js의 COUNTS와 같게) */
@@ -238,8 +238,14 @@ const KEY = "pe-eval-input-v1";
 const uid = () => Math.random().toString(36).slice(2,9);
 
 
-const BASE_SUBJECTS = ["국어","도덕","수학","사회","과학","영어","체육","음악","실과","미술","통합교과","창의적 체험활동"];
-const subjectList = () => [...BASE_SUBJECTS, ...(G.extraSubjects||[]).filter(s=>!BASE_SUBJECTS.includes(s))];
+/* 학년별 과목: 1·2학년은 통합교과, 3~6학년은 교과별. 학년을 고르지 않으면 전부 */
+const LOWER_SUBJECTS = ["국어","수학","바른 생활","즐거운 생활","슬기로운 생활"];
+const UPPER_SUBJECTS = ["국어","도덕","수학","사회","과학","영어","체육","음악","실과","미술","창의적 체험활동"];
+const isLowerGrade = g => /^[12]학년$/.test(g||"");
+const baseSubjects = (g=G.grade) => isLowerGrade(g) ? LOWER_SUBJECTS : g ? UPPER_SUBJECTS : [...UPPER_SUBJECTS, ...LOWER_SUBJECTS.filter(s=>!UPPER_SUBJECTS.includes(s))];
+const BASE_SUBJECTS = baseSubjects("");
+/* 계획서에서 새 과목을 불러오면 그 학년 목록에만 덧붙임: G.extraByGrade["3학년"] = [...] */
+const subjectList = (g=G.grade) => { const base = baseSubjects(g); const extra = [...new Set([...((G.extraByGrade||{})[g||"학년미선택"]||[]), ...(G.extraSubjects||[])])].filter(s=>!base.includes(s)); return [...base, ...extra]; };
 const KEY2 = "eval-input-v2:";
 const emptyOps = () => ({"최상":[],"상":[],"중":[],"하":[]});
 function defaultState(){
@@ -265,7 +271,7 @@ const dataKey = (subject, grade=G.grade) => KEY2 + (grade || "학년미선택") 
 (function migrateToGrades(){
   /* 예전에는 과목별로만 저장했음 → 지금 고른 학년의 데이터로 옮김 */
   if (G.byGrade) return;
-  for (const subj of subjectList()){
+  for (const subj of [...BASE_SUBJECTS, "통합교과", ...(G.extraSubjects||[])]){
     const legacy = lsGet(KEY2+subj);
     if (legacy && !lsGet(dataKey(subj))) lsSet(dataKey(subj), legacy);
     try { localStorage.removeItem(KEY2+subj); } catch(e) {}
@@ -289,6 +295,7 @@ function load(subject, grade=G.grade){
   }
   return s;
 }
+if (!subjectList().includes(G.subject)) G.subject = subjectList()[0];   // 학년에 없는 과목이면 첫 과목으로
 let S = load(G.subject);
 let saveT;
 function saveNow(){ clearTimeout(saveT); lsSet(dataKey(G.subject), S); lsSet(KEY2+"settings", G); }
@@ -580,8 +587,9 @@ $("#subject").onchange = e=>{
 $("#grade").onchange = e=>{
   saveNow();                       // 지금 학년 내용을 먼저 저장
   G.grade = e.target.value;
+  if (!subjectList().includes(G.subject)) G.subject = subjectList()[0];   // 1·2학년 ↔ 3~6학년은 과목이 다름
   S = load(G.subject);             // 학년마다 따로 저장된 내용을 불러옴
-  renderAll(); saveNow();
+  renderSubjects(); renderAll(); saveNow();
 };
 function renderAll(){ renderAreas(); renderTable(); fitAll(document); }
 window.addEventListener("pagehide", saveNow);
@@ -637,7 +645,7 @@ function applyImport(picked, fileGrade, replace){
   const grade = fileGrade || G.grade;   // 파일에 적힌 학년으로 넣음
   const done = [];
   for (const p of picked){
-    if (!subjectList().includes(p.subject)){ G.extraSubjects = [...(G.extraSubjects||[]), p.subject]; }
+    if (!subjectList(grade).includes(p.subject)){ const k = grade||"학년미선택"; G.extraByGrade = {...(G.extraByGrade||{}), [k]: [...((G.extraByGrade||{})[k]||[]), p.subject]}; }
     const stored = lsGet(dataKey(p.subject, grade));
     const s = (p.subject===G.subject && grade===G.grade) ? S : load(p.subject, grade);
     const fresh = !stored || s.areas.every(blankArea);
