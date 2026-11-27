@@ -64,6 +64,15 @@ button:disabled{opacity:.55;cursor:default}
 .lv-h{display:flex;justify-content:space-between;align-items:center}
 .lv-h small{font-family:var(--f-mono);color:var(--muted);font-size:12px}
 .ops{display:flex;flex-direction:column;gap:6px}
+/* 의견 하나씩: 다시 만들기·삭제 버튼 (마우스를 올리거나 칸을 누르면 보임, 터치 화면은 늘 보임) */
+.opw{position:relative}
+.opw .opi{display:block;width:100%;padding-bottom:24px}
+.opa{position:absolute;right:4px;bottom:4px;display:flex;gap:3px;opacity:0;transition:opacity .15s}
+.opw:hover .opa,.opw:focus-within .opa{opacity:1}
+@media (hover:none){.opa{opacity:1}}
+.opb{font-size:11px;padding:1px 7px;line-height:1.5;border-radius:4px;background:var(--surface)}
+.opb.del{color:var(--warn)}
+.opb[hidden]{display:none}
 .opi{font-size:13px;line-height:1.5;min-height:3.4em;resize:none;overflow:hidden;field-sizing:content;background:var(--surface);border-color:var(--line);padding:6px 8px}
 .opi.o1{color:var(--o1)} .opi.o2{color:var(--o2)} .opi.o3{color:var(--o3)} .opi.o4{color:var(--o4)}
 .area-left{display:flex;flex-direction:column;gap:10px;min-width:0}
@@ -347,13 +356,19 @@ function renderAreas(){
           <div class="ops" id="ops-${a.id}-${j}">${opsHTML(a,lv,j)}</div>
         </div>`).join("")}
       </div>
-      <p class="hint" style="padding:0 14px 12px">칸 하나가 의견 하나입니다(색으로 구분). 직접 고치면 바로 학생 표에 반영되고, 여러 줄을 붙여 넣으면 줄마다 다음 칸으로 나뉘어 들어가요.</p>
+      <p class="hint" style="padding:0 14px 12px">칸 하나가 의견 하나입니다(색으로 구분). 직접 고치면 바로 학생 표에 반영되고, 여러 줄을 붙여 넣으면 줄마다 다음 칸으로 나뉘어 들어가요. 마음에 안 드는 의견은 칸 아래 «다시»(그 의견만 AI로 새로 만들기)나 «삭제»를 누르세요.</p>
     </div>`).join("");
 }
 const hasOps = a => LV.some(l => (a.ops[l]||[]).length);
+/* 의견 칸 아래의 «다시»/«새로»·«삭제» 버튼 */
+const opButtons = (lv, k, has) => `<div class="opa"><button type="button" class="opb" data-one="regen" data-lv="${lv}" data-k="${k}" title="${has?"이 의견만 AI로 다시 만들기":"이 칸에 AI로 새 의견 만들기"}">${has?"다시":"새로"}</button><button type="button" class="opb del" data-one="del" data-lv="${lv}" data-k="${k}" title="이 의견 지우기" ${has?"":"hidden"}>삭제</button></div>`;
+function syncOpButtons(box){
+  box.querySelectorAll(".opw").forEach(w=>{ const has=!!w.querySelector(".opi").value.trim(); const [r,d]=w.querySelectorAll(".opb");
+    if (r.disabled) return; r.textContent = has?"다시":"새로"; r.title = has?"이 의견만 AI로 다시 만들기":"이 칸에 AI로 새 의견 만들기"; d.hidden = !has; });
+}
 function opsHTML(a, lv, j){
   const L = a.ops[lv]||[]; const n = Math.max(COUNT[lv], L.length);
-  return [...Array(n).keys()].map(k=>`<textarea class="opi o${k%4+1}" id="op-${a.id}-${j}-${k}" data-lv="${lv}" data-k="${k}" rows="2" aria-label="${lv} 의견 ${k+1}" placeholder="의견 ${k+1}">${esc(L[k]||"")}</textarea>`).join("");
+  return [...Array(n).keys()].map(k=>`<div class="opw"><textarea class="opi o${k%4+1}" id="op-${a.id}-${j}-${k}" data-lv="${lv}" data-k="${k}" rows="2" aria-label="${lv} 의견 ${k+1}" placeholder="의견 ${k+1}">${esc(L[k]||"")}</textarea>${opButtons(lv, k, !!(L[k]||"").trim())}</div>`).join("");
 }
 function fit(t){ if (CSS.supports && CSS.supports("field-sizing","content")) return; t.style.height="auto"; t.style.height=t.scrollHeight+2+"px"; }
 const fitAll = root => root.querySelectorAll(".opi").forEach(fit);
@@ -378,13 +393,69 @@ $("#areas").addEventListener("input", e=>{
       box.querySelectorAll(".opi")[Math.min(k+lines.length-1, a.ops[lv].length-1)]?.focus();
     } else {
       a.ops[lv] = vals.map(s=>s.trim()).filter(Boolean);
-      fit(el);
+      fit(el); syncOpButtons(box);
     }
     a.example = false;
     $("#lc-"+a.id+"-"+j).textContent = a.ops[lv].length+"/"+COUNT[lv];
     refreshTexts();
   }
   save();
+});
+/* ---------- 의견 하나만 다시 만들기·지우기 ---------- */
+/* 칸 내용이 바뀐 뒤 학생들이 고른 문장 번호(pick)를 문장 기준으로 다시 맞춤.
+   replaced: {old:"바뀌기 전 문장", now:"새 문장"} → 그 문장을 쓰던 학생은 새 문장으로 */
+function remapPicks(a, lv, before, replaced){
+  S.rows.forEach((r,i)=>{
+    if (r.sel[a.id]!==lv || r.pick[a.id]==null) return;
+    const t = before.length ? before[r.pick[a.id]%before.length] : null;
+    const want = replaced && t===replaced.old ? replaced.now : t;
+    const ni = a.ops[lv].indexOf(want);
+    r.pick[a.id] = ni>=0 ? ni : (a.ops[lv].length ? pickFor(a.id, lv, i) : undefined);
+  });
+}
+function setSlots(a, lv, vals, replaced){
+  const j = LV.indexOf(lv), box = $(`#ops-${a.id}-${j}`), before = [...a.ops[lv]];
+  a.ops[lv] = vals.map(s=>String(s||"").replace(/\s+/g," ").trim()).filter(Boolean);
+  a.example = false;
+  remapPicks(a, lv, before, replaced);
+  box.innerHTML = opsHTML(a, lv, j); fitAll(box);
+  $("#lc-"+a.id+"-"+j).textContent = a.ops[lv].length+"/"+COUNT[lv];
+  refreshTexts(); save();
+}
+async function regenOne(a, lv, k, btn){
+  if (!a.criteria.trim()){ setStatus(a.id,"평가 기준을 먼저 입력해 주세요.",true); $("#ac-"+a.id).focus(); return; }
+  const box = $(`#ops-${a.id}-${LV.indexOf(lv)}`);
+  const vals = [...box.querySelectorAll(".opi")].map(t=>t.value);
+  const oldText = (vals[k]||"").replace(/\s+/g," ").trim();
+  const existing = vals.filter((v,i)=>i!==k).map(v=>v.trim()).filter(Boolean);
+  box.querySelectorAll(".opb").forEach(x=>x.disabled=true); btn.textContent = "…";
+  setStatus(a.id, `«${lv}» 의견 하나를 ${oldText?"다시":"새로"} 만들고 있어요.`);
+  try{
+    const res = await fetch(API_URL, {method:"POST", headers:{"content-type":"application/json"},
+      body: JSON.stringify({accessCode:accessCode(), action:"one", level:lv, existing, subject:G.subject, grade:G.grade||"", name:a.name, activity:a.activity||"", criteria:a.criteria})});
+    const data = await res.json().catch(()=>({}));
+    if (res.status===401 && data.reason==="access"){ lock("입장 코드가 바뀌었습니다. 다시 입력해 주세요."); throw new Error(data.message); }
+    if (!res.ok) throw new Error(data.message||"만들지 못했습니다. 잠시 후 다시 눌러 주세요.");
+    const now = String(data.text||"").replace(/\s+/g," ").trim();
+    if (!now || now.startsWith("{")) throw new Error("서버를 새 버전으로 배포해야 이 기능을 쓸 수 있습니다.");
+    vals[k] = now;
+    setSlots(a, lv, vals, oldText ? {old:oldText, now} : null);
+    setStatus(a.id, `«${lv}» 의견 하나를 ${oldText?"다시":"새로"} 만들었습니다.${typeof data.remaining==="number"?` (오늘 남은 생성: ${data.remaining}회)`:""}`);
+  }catch(err){
+    setStatus(a.id, err.message && !/fetch|network/i.test(err.message) ? err.message : "서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.", true);
+    box.querySelectorAll(".opb").forEach(x=>x.disabled=false); syncOpButtons(box);
+  }
+}
+$("#areas").addEventListener("click", e=>{
+  const b = e.target.closest("button[data-one]"); if(!b) return;
+  const a = S.areas.find(x=>x.id===b.closest(".area").dataset.id), lv = b.dataset.lv, k = +b.dataset.k;
+  if (b.dataset.one==="regen"){ regenOne(a, lv, k, b); return; }
+  /* 삭제: 실수 방지로 한 번 더 눌러야 지움 */
+  if (!b.dataset.confirm){ b.dataset.confirm="1"; b.textContent="한 번 더"; setTimeout(()=>{ if(b.isConnected){ delete b.dataset.confirm; b.textContent="삭제"; } }, 3000); return; }
+  const box = $(`#ops-${a.id}-${LV.indexOf(lv)}`);
+  const vals = [...box.querySelectorAll(".opi")].map(t=>t.value); vals.splice(k,1);
+  setSlots(a, lv, vals, null);
+  setStatus(a.id, `«${lv}» 의견 하나를 지웠습니다. 빈 칸의 «새로»를 누르면 AI가 새 의견을 만듭니다.`);
 });
 $("#areas").addEventListener("click", e=>{
   const b = e.target.closest("button[data-act]"); if(!b) return;

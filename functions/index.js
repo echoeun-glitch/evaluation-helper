@@ -3,6 +3,7 @@
  * POST /generateOpinions  {accessCode, subject, grade, name, activity, criteria}
  *   200 → {text: "<JSON 문자열>", remaining: <오늘 남은 횟수>}
  *   4xx/5xx → {message: "<사용자에게 보여 줄 안내>"}   (401 + reason:"access" = 입장 코드 틀림)
+ * POST /generateOpinions  {accessCode, action:"one", level, existing:[…], subject, …}  → 200 {text:"<의견 하나>", remaining}
  * POST /generateOpinions  {accessCode, action:"check"}  → 200 {ok:true}  (입장 코드 확인만, 횟수 안 셈)
  *
  * Claude API 키(ANTHROPIC_API_KEY)와 입장 코드(ACCESS_CODE)는 Secret Manager에 둡니다(코드·저장소에 넣지 않음).
@@ -16,6 +17,7 @@ import { createHash } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import {
   ALLOWED_ORIGINS, OPINION_SCHEMA, buildPrompt, validateInput, normalizeOpinions, clientIp, kstDay, codeMatches,
+  validateOne, buildOnePrompt, ONE_SCHEMA, normalizeOne,
 } from "./lib.js";
 
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
@@ -64,23 +66,29 @@ async function release(day, userKey) {
   ]).catch((e) => logger.warn("usage release failed", e));
 }
 
-async function callClaude(input) {
+async function callClaude(input, one) {
   const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value(), timeout: 100_000, maxRetries: 1 });
   const res = await client.beta.messages.create({
     model: MODEL,
-    max_tokens: 16000,
+    max_tokens: one ? 4000 : 16000,
     output_config: {
       effort: "low", // 짧은 문장 생성이라 낮은 effort로 빠르게
-      format: { type: "json_schema", schema: OPINION_SCHEMA },
+      format: { type: "json_schema", schema: one ? ONE_SCHEMA : OPINION_SCHEMA },
     },
     // 안전 분류기가 거절하면 서버가 알아서 다른 모델로 다시 시도
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
-    messages: [{ role: "user", content: buildPrompt(input) }],
+    messages: [{ role: "user", content: one ? buildOnePrompt(input, one.level, one.existing) : buildPrompt(input) }],
   });
   if (res.stop_reason === "refusal") return { error: "AI가 이 요청에 답하지 않았습니다. 평가 기준 문구를 바꿔 다시 시도해 주세요.", status: 422 };
   if (res.stop_reason === "max_tokens") return { error: "답이 너무 길어 중간에 끊겼습니다. 다시 생성해 주세요.", status: 502 };
   const text = res.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+  if (one) {
+    const opinion = normalizeOne(text);
+    if (!opinion) return { error: "결과 형식을 읽지 못했습니다. 다시 눌러 주세요.", status: 502 };
+    logger.info("generated one", { model: res.model, usage: res.usage });
+    return { opinion };
+  }
   const ops = normalizeOpinions(text);
   if (!ops) return { error: "결과 형식을 읽지 못했습니다. 다시 생성해 주세요.", status: 502 };
   logger.info("generated", { model: res.model, usage: res.usage });
@@ -125,6 +133,12 @@ export const generateOpinions = onRequest(
 
     const { value: input, error } = validateInput(req.body);
     if (error) { res.status(400).json({ message: error }); return; }
+    let one = null;   // 의견 하나만 새로 만들기
+    if (req.body?.action === "one") {
+      const v = validateOne(req.body);
+      if (v.error) { res.status(400).json({ message: v.error }); return; }
+      one = v.value;
+    }
 
     let remaining;
     try {
@@ -140,9 +154,9 @@ export const generateOpinions = onRequest(
     }
 
     try {
-      const out = await callClaude(input);
+      const out = await callClaude(input, one);
       if (out.error) { await release(day, userKey); res.status(out.status).json({ message: out.error }); return; }
-      res.json({ text: JSON.stringify(out.ops), remaining });
+      res.json({ text: one ? out.opinion : JSON.stringify(out.ops), remaining });
     } catch (e) {
       await release(day, userKey);
       if (e instanceof Anthropic.RateLimitError || e instanceof Anthropic.InternalServerError) {

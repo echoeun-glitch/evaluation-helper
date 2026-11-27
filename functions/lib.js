@@ -96,3 +96,48 @@ export function codeMatches(given, expected) {
   const h = (v) => createHash("sha256").update(norm(v)).digest();
   return timingSafeEqual(h(given), h(expected));
 }
+
+/* ---------- 의견 하나만 새로 만들기 ---------- */
+export function validateOne(body) {
+  const level = body?.level;
+  if (!LEVELS.includes(level)) return { error: "성취 수준이 올바르지 않습니다." };
+  const ex = body?.existing ?? [];
+  if (!Array.isArray(ex) || ex.length > 30 || ex.some((s) => typeof s !== "string" || s.length > 400)) return { error: "요청 형식이 올바르지 않습니다." };
+  return { value: { level, existing: ex.map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean) } };
+}
+
+export function buildOnePrompt({ subject, grade, name, activity, criteria }, level, existing) {
+  const have = existing.length ? existing.map((s) => `- ${s}`).join("\n") : "(없음)";
+  return `당신은 초등학교 ${grade || ""} ${subject} 교과를 가르치는 교사입니다. 학교생활기록부 '교과학습발달상황(세부능력 및 특기사항)'에 쓸 평가 의견을 만듭니다.
+
+과목: ${subject}
+평가 영역: ${name || "(이름 없음)"}
+주요 활동: ${activity || "(없음)"}
+평가 기준: ${criteria}
+
+성취 수준 "${level}"에 해당하는 새 의견을 딱 1개 씁니다.
+
+규칙:
+- 주요 활동이 있으면 의견에 그 활동 이름이나 장면을 자연스럽게 녹여 구체적으로 씁니다.
+- 의견은 반드시 정확히 두 문장입니다. 각 문장은 마침표로 끝납니다.
+- 생활기록부 문체: 명사형 종결("~함.", "~임.", "~보임.", "~필요함." 등). 학생 이름이나 "학생은", "이 학생은" 같은 주어는 쓰지 않습니다.
+- 평가 기준의 구체적인 지식·기능·태도 요소를 근거로 관찰 가능한 행동을 서술합니다.
+- 최상·상은 강점 중심, 중은 성취와 보완점, 하는 노력과 성장 가능성을 긍정적으로 서술하되 부정적·비하 표현은 쓰지 않습니다.
+- 아래 이미 있는 "${level}" 의견들과 첫 어절·표현·내용이 겹치지 않게 씁니다. 60~110자 정도.
+
+이미 있는 "${level}" 의견:
+${have}
+
+새 의견을 JSON으로 답하세요.`;
+}
+
+export const ONE_SCHEMA = {
+  type: "object",
+  properties: { opinion: { type: "string" } },
+  required: ["opinion"],
+  additionalProperties: false,
+};
+
+export function normalizeOne(text) {
+  try { const o = JSON.parse(text); const s = String(o?.opinion ?? "").replace(/\s+/g, " ").trim(); return s || null; } catch { return null; }
+}

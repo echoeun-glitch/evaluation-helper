@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validateInput, buildPrompt, normalizeOpinions, clientIp, kstDay, OPINION_SCHEMA, codeMatches } from "./lib.js";
+import { validateInput, buildPrompt, normalizeOpinions, clientIp, kstDay, OPINION_SCHEMA, codeMatches, validateOne, buildOnePrompt, normalizeOne } from "./lib.js";
 
 test("validateInput", () => {
   assert.ok(validateInput(null).error);
@@ -35,4 +35,15 @@ test("codeMatches", () => {
   assert.equal(codeMatches(123, "123"), false);
   assert.equal(codeMatches("abc", ""), false);
   assert.equal(codeMatches("x".repeat(201), "x".repeat(201)), false);
+});
+test("one opinion", () => {
+  assert.ok(validateOne({ level: "최고" }).error);
+  assert.ok(validateOne({ level: "상", existing: "x" }).error);
+  assert.ok(validateOne({ level: "상", existing: ["가".repeat(401)] }).error);
+  assert.deepEqual(validateOne({ level: "중", existing: [" a  b ", ""] }).value, { level: "중", existing: ["a b"] });
+  assert.deepEqual(validateOne({ level: "하" }).value, { level: "하", existing: [] });
+  const p = buildOnePrompt({ subject: "체육", grade: "3학년", name: "표현", activity: "", criteria: "기준" }, "상", ["이미 있는 의견임."]);
+  assert.match(p, /"상"에 해당하는 새 의견을 딱 1개/); assert.match(p, /- 이미 있는 의견임\./);
+  assert.equal(normalizeOne('{"opinion":"  새  의견임. "}'), "새 의견임.");
+  assert.equal(normalizeOne("x"), null); assert.equal(normalizeOne('{"opinion":""}'), null);
 });
