@@ -281,7 +281,10 @@ const dataKey = (subject, grade=G.grade) => KEY2 + (grade || "학년미선택") 
 function load(subject, grade=G.grade){
   let s = lsGet(dataKey(subject, grade));
   if (!s || !Array.isArray(s.areas)) s = defaultState();
-  s.areas.forEach(a=>{ a.activity ??= ""; a.ops ||= emptyOps(); });
+  s.areas.forEach(a=>{
+    a.activity ??= ""; a.ops ||= emptyOps();
+    for (const k of Object.keys(a)) if (/^\d+$/.test(k)) delete a[k];   // 예전 버그로 의견 수정이 "0","1"… 칸에 잘못 저장된 것 정리
+  });
   s.rows ||= [];
   /* 예전 체육 예시(건강·경쟁 영역, 예시 학생 5명)가 손대지 않은 채 남아 있으면 지움 */
   const isOldExample = a => (a.example && a.name==="건강" && /^건강 체력의 요소를 이해하고/.test(a.criteria||"")) ||
@@ -358,7 +361,8 @@ const fitAll = root => root.querySelectorAll(".opi").forEach(fit);
 $("#areas").addEventListener("input", e=>{
   const el = e.target, card = el.closest(".area"); if(!card) return;
   const a = S.areas.find(x=>x.id===card.dataset.id);
-  if (el.dataset.k){
+  /* 의견 칸에도 data-k(칸 번호)가 있으므로 의견(data-lv)인지 먼저 봐야 함 */
+  if (el.dataset.k && !el.dataset.lv){
     a[el.dataset.k] = el.value; if(el.dataset.k==="name") renderTable();
     if (el.dataset.k==="activity"){ const on=needAct(a); el.classList.toggle("need",on); $("#na-"+a.id).hidden=!on; }
   }
